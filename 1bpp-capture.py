@@ -2,7 +2,8 @@
 import mss
 from PIL import Image
 import time, subprocess
-path = "/home/amadeo/epdiy/encoder/python/Pillow/"
+#for test single file:
+path = "/home/"
 file = "google.png"
 input_file = f"{path}{file}"
 
