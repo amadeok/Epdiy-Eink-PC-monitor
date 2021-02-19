@@ -1,32 +1,33 @@
 # Epdiy Eink Pc Monitor 
 
-####Description:
+#### Description:
 This repository contains the source code for a client a host application that allow a Epdiy eink display controller board to mirror the image of a monitor, allowing the eink display to be used as a pc monitor.
-
+Video:
+[![IMAGE ALT TEXT](http://img.youtube.com/vi/bzk12na2mWg/0.jpg)](http://www.youtube.com/watch?v=bzk12na2mWg "Video Title")
 
 ------------
 
 
-#####Supported platforms:
+#### Supported platforms:
 At the moment only Linux, but will be ported for Windows. It has been tested on Ubuntu 20.04
 
 ------------
 
 
-#####How it works:
+#### How it works:
 The Python module mss is used to capture the screen and Pillow is used to convert the capture to black and white. The black and white image is piped to a C++ program that generates the eink framebuffer, compresses it with RLE compression and sends it wirelessly to the Epdiy board using TCP protocol.The ESP32 application for the board receives the compressed framebuffer, extracts it and uses the Epdiy driver to write it to the display. 
 
 ------------
 
 
-#####Notes on development:
+#### Notes on development:
 - Framerate and draw time depend on settings, on how much screen has changed and speed of wifi,  with default settings full frame draw time including the wifi transfer can be between 100ms to 160ms (10 fps to 6.25 fps). This will be improved in the future.
 - Ghosting can be a problem in particular when drawing white letters on black background. Is recommended to use black letters on white background.
 - The project has been tested using a board revision 4 and a ED097TC2 display. Support for other displays could be added in the future as the only hard dependency of the pc mirroring application at the moment is the resolution.
 - It is necessary to have at least 1 real monitor plugged in to a port of the pc, and the application will mirror a 1200x825 pixel area of that monitor, a dummy hdmi plug could be used to bypass this limitation.
 
 ------------
-####Dependencies:
+#### Dependencies:
 This project requires a Epdiy controller board, to get one is necessary to order a pcb and solder the components. For more info go: https://github.com/vroland/epdiy
 Required Python modules:
 ```bash
@@ -35,7 +36,7 @@ pip install pyautogui
 pip install  numpy
 ```
 
-####Installation:
+#### Installation:
 
 Flash the demo example on the example folder of the Epdiy repository to verify that it is working correctly.
 
@@ -79,7 +80,7 @@ python3 screen_capture.py
 ------------
 
 
-####Settings:
+#### Settings:
 The following settings can be changed to experiment, or the defaults can also be used. 
 - *greyscale_to_monochrome_threshold*  in *screen_capture.py* line 16
 When converting the capture from 256 greyscale shades to black and white monochrome a threshold is used to determine which shades will become plain black and which plain white. The default is 200 and it improves drawing black letters on white background. To change the value of that threshold change the value of the variable *greyscale_to_monochrome_threshold* 
@@ -102,7 +103,5 @@ Increases the high tick time of the CKV signal. A higher value makes blacks blac
 - Improve ghosting
 - Optimize data transfer between pc and board
 - Add support for quad grid configuration (four displays in grid configuration)
-
-
 
 
