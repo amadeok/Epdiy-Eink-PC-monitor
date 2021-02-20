@@ -1,7 +1,7 @@
 
 
 # Epdiy Eink Pc Monitor 
-(work in progress)
+
 #### Description:
 This repository contains the source code for a client a host application that allow a Epdiy eink display controller board to mirror the image of a monitor, allowing the eink display to be used as a pc monitor.
 Video:
@@ -48,7 +48,7 @@ pip install  numpy
 cd
 git clone https://github.com/amadeok/Epdiy-PC-monitor
 cd ~/epdiy/examples 
-tar -xf  ~/Epdiy-PC-monitor/pc-monitor-example.tar.xz
+tar -xf  ~/Epdiy-PC-monitor/pc_monitor.tar.xz
 ```
 
 4) The computer and board should connect to the same wifi network. Go to      *~/epdiy/examples/pc-monitor/main/*, open *main.c* , go to line 31  and insert the SSID of the wifi network you are going to use in the *WIFI_SSID* variable  and the password of the wifi in the *WIFI_PASS* variable.
