@@ -1,4 +1,5 @@
 
+
 # Epdiy Eink Pc Monitor 
 
 #### Description:
@@ -25,8 +26,7 @@ The Python module mss is used to capture the screen and Pillow is used to conver
 #### Notes on development:
 - Framerate and draw time depend on settings, on how much screen has changed and speed of wifi,  with default settings full frame draw time including the wifi transfer can be between 100ms to 160ms (10 fps to 6.25 fps). This will be improved in the future.
 - Ghosting can be a problem in particular when drawing white letters on black background. Is recommended to use black letters on white background.
-- The project has been tested using a board revision 4 and a ED097TC2 display. Support for other displays could be added in the future as the only hard dependency of the pc mirroring application at the moment is the resolution.
-- It is necessary to have at least 1 real monitor plugged in to a port of the pc, and the application will mirror a 1200x825 pixel area of that monitor, a dummy hdmi plug could be used to bypass this limitation.
+- It is necessary to have at least 1 real monitor plugged in to a port of the pc, and the application will mirror an area of that monitor, a dummy hdmi plug could be used to bypass this limitation.
 
 ------------
 #### Dependencies:
@@ -43,19 +43,19 @@ pip install  numpy
 
 1) Flash the demo example on the example folder of the Epdiy repository to verify that it is working correctly.
 
-3)  Get the repository:
+3)  Get the Pc Monitor example repository:
 ```bash
 cd
 git clone https://github.com/amadeok/Epdiy-PC-monitor
 cd ~/epdiy/examples 
-tar xzvf ~/Epdiy-PC-monitor/pc-monitor-example.tar.gz
+tar -xf  ~/Epdiy-PC-monitor/pc-monitor-example.tar.xz
 ```
 
-4) The computer and board should connect to the same wifi network. Go to      ~/Epdiy/examples/pc-monitor/main/, open main.c , go to line 31  and insert the SSID of the wifi network you are going to use in the WIFI_SSID variable  and the password of the wifi on the WIFI_PASS variable.
+4) The computer and board should connect to the same wifi network. Go to      *~/epdiy/examples/pc-monitor/main/*, open *main.c* , go to line 31  and insert the SSID of the wifi network you are going to use in the *WIFI_SSID* variable  and the password of the wifi in the *WIFI_PASS* variable.
 
 5) Build  and flash the client application for the board:
 ```bash
-cd ~/epdiy/examples/pc-monitor
+cd ~/epdiy/examples/pc_monitor
 idf.py build && idf.py flash -b 921600 && idf.py monitor
 ```
 
@@ -66,12 +66,12 @@ IP Address:  xxx.xxx.xxx.xxx
 
 (where xxx.xxx.xxx.xxx is an ip address)
 
-go to /Epdiy/examples/pc-monitor/pc-host-application/, open main.cpp and change the ip address of the variable *esp32-ip-address*  in line 20 to the ip address displayed in the terminal.
+go to *~/epdiy/examples/pc_monitor/pc_host_app/*, open *main.cpp* and change the ip address of the variable *esp32-ip-address*  in line 22 to the ip address displayed in the terminal.
 
 7) Build the pc-host application:
 On a new terminal:
 ```bash
-cd   ~ /epdiy/examples/pc-monitor/pc-host-app/ 
+cd   ~/epdiy/examples/pc_monitor/pc_host_app/
 g++  main.cpp generate_eink_framebuffer.cpp rle_compression.cpp utils.cpp -o process_capture -I include
 
 ```
@@ -81,7 +81,8 @@ To start the mirroring execute:
 python3 screen_capture.py
 
 ```
-------------
+
+Important: always exit the pc host application by pressing the letter **q**
 
 
 #### Settings:
@@ -100,6 +101,12 @@ Because of the way that eink displays work, writing the same framebuffer to the 
 Increases the high tick time of the CKV signal. A higher value makes blacks blacker and whites whiter. Increases draw time.
 
 ------------
+#### Support for other displays
+-The project has been tested using a board revision 4 and a ED097TC2 display. Check for the list of other  displays supported by the Epdiy board on https://github.com/vroland/epdiy . Those displays should work but are untested. If the display you want to try has the same resolution of the ED097TC2, that is 1200x825, it should be enough to select the correct display type in the menuconfig Epdiy section.
+If the display you want to try has a different resolution, other than selecting it in the menuconfig, you should also:
+1) open *~/epdiy/examples/pc_monitor/pc_host_app/main.cpp*, go to line 23 and change the values of the variables *width_resolution* and  *height_resolution* to the width and height resolution of your display.
+2)  open  _~/epdiy/examples/pc_monitor/pc_host_app/screen_capture.py_, go to line 20 and change the values of the variables  *width_res*  and  *height_res*  to the width and height resolution of your display.
+ ------------
 
 
 #### To do list:
