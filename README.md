@@ -41,7 +41,7 @@ pip install  numpy
 
 #### Installation:
 
-Flash the demo example on the example folder of the Epdiy repository to verify that it is working correctly.
+1) Flash the demo example on the example folder of the Epdiy repository to verify that it is working correctly.
 
 3)  Get the repository:
 ```bash
