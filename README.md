@@ -31,6 +31,7 @@ The Python module mss is used to capture the screen and Pillow is used to conver
 ------------
 #### Dependencies:
 This project requires a Epdiy controller board, to get one is necessary to order a pcb and solder the components. For more info go: https://github.com/vroland/epdiy
+
 Required Python modules:
 ```bash
 pip install mss
