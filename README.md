@@ -47,7 +47,7 @@ pip install  numpy
 ```bash
 cd
 git clone https://github.com/amadeok/Epdiy-PC-monitor
-cd ~/Epdiy/examples 
+cd ~/epdiy/examples 
 tar xzvf ~/Epdiy-PC-monitor/pc-monitor-example.tar.gz
 ```
 
@@ -55,7 +55,7 @@ tar xzvf ~/Epdiy-PC-monitor/pc-monitor-example.tar.gz
 
 5) Build  and flash the client application for the board:
 ```bash
-cd ~/Epdiy/examples/pc-monitor
+cd ~/epdiy/examples/pc-monitor
 idf.py build && idf.py flash -b 921600 && idf.py monitor
 ```
 
@@ -71,8 +71,8 @@ go to /Epdiy/examples/pc-monitor/pc-host-application/, open main.cpp and change 
 7) Build the pc-host application:
 On a new terminal:
 ```bash
-cd   ~ /Epdiy/examples/pc-monitor/pc-host-app/ 
-g++ main.cpp -o process-capture -I include
+cd   ~ /epdiy/examples/pc-monitor/pc-host-app/ 
+g++  main.cpp generate_eink_framebuffer.cpp rle_compression.cpp utils.cpp -o process_capture -I include
 
 ```
 8) Now the pc is ready to start the mirroring. If the board is ready to start mirroring it will display a message saying "Socket listening ".
