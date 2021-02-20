@@ -47,8 +47,8 @@ pip install  numpy
 3)  Get the Pc Monitor application repository:
 ```bash
 cd
-git clone https://github.com/amadeok/Epdiy-PC-monitor
-cp -R ~/Epdiy-PC-monitor/pc_monitor ~/epdiy/examples 
+git clone https://github.com/amadeok/Epdiy-Eink-PC-monitor
+cp -R ~/Epdiy-Eink-PC-monitor/pc_monitor ~/epdiy/examples 
 
 ```
 
