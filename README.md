@@ -1,7 +1,8 @@
 
 
-# Epdiy Eink Pc Monitor 
 
+# Epdiy Eink Pc Monitor 
+(word in progress)
 #### Description:
 This repository contains the source code for a client a host application that allow a Epdiy eink display controller board to mirror the image of a monitor, allowing the eink display to be used as a pc monitor.
 Video:
@@ -87,17 +88,17 @@ Important: always exit the pc host application by pressing the letter **q**
 
 #### Settings:
 The following settings can be changed to experiment, or the defaults can also be used. 
-- *greyscale_to_monochrome_threshold*  in *screen_capture.py* line 16
+- *greyscale_to_monochrome_threshold*  in *screen_capture.py* line 16             
 When converting the capture from 256 greyscale shades to black and white monochrome a threshold is used to determine which shades will become plain black and which plain white. The default is 200 and it improves drawing black letters on white background. To change the value of that threshold change the value of the variable *greyscale_to_monochrome_threshold* 
-- *x_offset* and *y_offset* in *screen_capture.py* line 13 and 14
+- *x_offset* and *y_offset* in *screen_capture.py* line 13 and 14            
 They set how many pixels away for the top left corner the screen will be captured. ie. setting both to zero will capture 1200x825 pixels from the extreme top left corner of the screen. setting them to 100 and 50 will capture 1200x825 pixels 100 pixels to the right and 50 pixels from the top left corner of the screen
 - *sleep_time* in  *screen_capture.py* line 15
 Sets the amount of time in miliseconds to sleep after each capture.
 - *esp32_ip_address* in *../examples/pc_host_app/main.cpp*
 Sets the ip address of the esp32 for the pc host application to connect to.
-- *nb_times_to_write_framebuffer*  in* ~/epdiy/examples/pc_monitor/main/pc_monitor.c* line 16
-Because of the way that eink displays work, writing the same framebuffer to the display has the effect of improving clarity and contrast. The varialbe *nb_times_to_write_framebuffer* defines the number of times to write the current eink framebuffer to the display. Increases draw time.
-- *rmt_high_time* in *~/epdiy/examples/pc_monitor/main/pc_monitor.c *line 17
+- *nb_times_to_write_framebuffer*  in *~/epdiy/examples/pc_monitor/main/pc_monitor.c* line 16                
+Because of the way that eink displays work, writing the same framebuffer to the display has the effect of getting deeper blacks and whites. The variable *nb_times_to_write_framebuffer* defines the number of times to write the current eink framebuffer to the display. Increases draw time.
+- *rmt_high_time* in *~/epdiy/examples/pc_monitor/main/pc_monitor.c* line 17         
 Increases the high tick time of the CKV signal. A higher value makes blacks blacker and whites whiter. Increases draw time.
 
 ------------
