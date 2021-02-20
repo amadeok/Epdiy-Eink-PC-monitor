@@ -2,7 +2,7 @@
 
 
 # Epdiy Eink Pc Monitor 
-(work in progress)
+(word in progress)
 #### Description:
 This repository contains the source code for a client a host application that allow a Epdiy eink display controller board to mirror the image of a monitor, allowing the eink display to be used as a pc monitor.
 Video:
@@ -44,12 +44,12 @@ pip install  numpy
 
 1) Flash the demo example on the example folder of the Epdiy repository to verify that it is working correctly.
 
-3)  Get the Pc Monitor example repository:
+3)  Get the Pc Monitor application repository:
 ```bash
 cd
 git clone https://github.com/amadeok/Epdiy-PC-monitor
-cd ~/epdiy/examples 
-tar -xf  ~/Epdiy-PC-monitor/pc_monitor.tar.xz
+cp -R ~/Epdiy-PC-monitor/pc_monitor ~/epdiy/examples 
+
 ```
 
 4) The computer and board should connect to the same wifi network. Go to      *~/epdiy/examples/pc-monitor/main/*, open *main.c* , go to line 31  and insert the SSID of the wifi network you are going to use in the *WIFI_SSID* variable  and the password of the wifi in the *WIFI_PASS* variable.
@@ -98,7 +98,7 @@ Sets the amount of time in miliseconds to sleep after each capture.
 Sets the ip address of the esp32 for the pc host application to connect to.
 - *nb_times_to_write_framebuffer*  in *~/epdiy/examples/pc_monitor/main/pc_monitor.c* line 16                
 Because of the way that eink displays work, writing the same framebuffer to the display has the effect of getting deeper blacks and whites. The variable *nb_times_to_write_framebuffer* defines the number of times to write the current eink framebuffer to the display. Increases draw time.
-- *rmt_high_time* in *~/epdiy/examples/pc_monitor/main/pc_monitor.c* line 17         
+- *rmt_high_time* in *~/epdiy/examples/pc_monitor/main/pc_monitor.c *line 17         
 Increases the high tick time of the CKV signal. A higher value makes blacks blacker and whites whiter. Increases draw time.
 
 ------------
