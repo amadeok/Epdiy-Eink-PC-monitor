@@ -120,15 +120,15 @@ If the display you want to try has a different resolution, other than selecting 
 idf.py menuconfig
 
 
-'''' (Top) → Component config → E-Paper Driver
-    Display Type (ED047TC1 (LILYGO 4.7 inch))  --->
-    Board / Board Revision (LILYGO T5-4.7 inch e-paper)  --->
+```` (Top) → Component config → E-Paper Driver
+````    Display Type (ED047TC1 (LILYGO 4.7 inch))  --->
+````    Board / Board Revision (LILYGO T5-4.7 inch e-paper)  --->
 
-(Top) → Serial flasher config → Flash size
-(X) 16 MB
+```` (Top) → Serial flasher config → Flash size
+```` (X) 16 MB
 
-(Top) → Component config → Common ESP-related
-[*] Interrupt watchdog
+```` (Top) → Component config → Common ESP-related
+```` [*] Interrupt watchdog
 
-idf.py build && idf.py flash -b 921600 && idf.py monitor
+```` idf.py build && idf.py flash -b 921600 && idf.py monitor
 
