@@ -105,7 +105,7 @@ Increases the high tick time of the CKV signal. A higher value makes blacks blac
 #### Support for other displays
 -The project has been tested using a board revision 4 and a ED097TC2 display. Check for the list of other  displays supported by the Epdiy board on https://github.com/vroland/epdiy . Those displays should work but are untested. If the display you want to try has the same resolution of the ED097TC2, that is 1200x825, it should be enough to select the correct display type in the menuconfig Epdiy section.
 If the display you want to try has a different resolution, other than selecting it in the menuconfig, you should also:
-1) open *~/epdiy/examples/pc_monitor/pc_host_app/main.cpp*, go to line (23 and 113) and change the values of the variables *width_resolution* and  *height_resolution* to the width and height resolution of your display.
+1) open *~/epdiy/examples/pc_monitor/pc_host_app/main.cpp*, go to line 23 and change the values of the variables *width_resolution* and  *height_resolution* to the width and height resolution of your display.
 2)  open  _~/epdiy/examples/pc_monitor/pc_host_app/screen_capture.py_, go to line 20 and change the values of the variables  *width_res*  and  *height_res*  to the width and height resolution of your display.
  ------------
 
