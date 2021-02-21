@@ -110,7 +110,6 @@ static int mirroring_task()
         std::string string_buf = "";
         printf("new pipe size: %ld\n", pipe_size);
     }
-    int width_resolution = 1200, height_resolution = 825;
     nb_chunks = 5; // number of pieces into which divide the framebuffer (for multiprocessing)
 
     total_nb_pixels = width_resolution * height_resolution;
