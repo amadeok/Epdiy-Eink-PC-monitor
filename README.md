@@ -120,7 +120,7 @@ If the display you want to try has a different resolution, other than selecting 
 idf.py menuconfig
 
 
-(Top) → Component config → E-Paper Driver
+'''' (Top) → Component config → E-Paper Driver
     Display Type (ED047TC1 (LILYGO 4.7 inch))  --->
     Board / Board Revision (LILYGO T5-4.7 inch e-paper)  --->
 
