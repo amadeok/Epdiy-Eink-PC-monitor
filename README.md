@@ -109,14 +109,13 @@ If the display you want to try has a different resolution, other than selecting 
 2)  open  _~/epdiy/examples/pc_monitor/pc_host_app/screen_capture.py_, go to line 20 and change the values of the variables  *width_res*  and  *height_res*  to the width and height resolution of your display.
  ------------
 
-
 #### To do list:
 - Organize the code better
 - Improve ghosting
 - Optimize data transfer between pc and board
 - Add support for quad grid configuration (four displays in grid configuration)
 
-###LILYGo 4.7 Specific
+#### LILYGo 4.7 Specific
 
 idf.py menuconfig
 
