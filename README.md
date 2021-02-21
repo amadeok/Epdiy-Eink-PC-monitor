@@ -116,4 +116,20 @@ If the display you want to try has a different resolution, other than selecting 
 - Optimize data transfer between pc and board
 - Add support for quad grid configuration (four displays in grid configuration)
 
+###LILYGo 4.7 Specific
+
+idf.py menuconfig
+
+
+(Top) → Component config → E-Paper Driver
+    Display Type (ED047TC1 (LILYGO 4.7 inch))  --->
+    Board / Board Revision (LILYGO T5-4.7 inch e-paper)  --->
+
+(Top) → Serial flasher config → Flash size
+(X) 16 MB
+
+(Top) → Component config → Common ESP-related
+[*] Interrupt watchdog
+
+idf.py build && idf.py flash -b 921600 && idf.py monitor
 
