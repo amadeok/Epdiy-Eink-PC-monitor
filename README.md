@@ -118,10 +118,7 @@ If the display you want to try has a different resolution, other than selecting 
 #### LILYGo 4.7 Specific
 
 ````
-
 idf.py menuconfig
-
-
 
  (Top) → Component config → E-Paper Driver
     Display Type (ED047TC1 (LILYGO 4.7 inch))  --->
@@ -134,4 +131,6 @@ idf.py menuconfig
  [*] Interrupt watchdog
 
  idf.py build && idf.py flash -b 921600 && idf.py monitor
+````
 
+#### END
