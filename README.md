@@ -2,7 +2,7 @@
 
 
 # Epdiy Eink Pc Monitor 
-(word in progress)
+(work in progress)
 #### Description:
 This repository contains the source code for a client a host application that allow a Epdiy eink display controller board to mirror the image of a monitor, allowing the eink display to be used as a pc monitor.
 Video:
