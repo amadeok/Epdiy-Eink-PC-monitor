@@ -295,7 +295,6 @@ with mss.mss() as sct:
             image_file = image_file.transpose(Image.FLIP_TOP_BOTTOM)
 
         elif mode == 2:
-            grey_to_monochrome_threshold = 200 
 
             def fn(x): return 255 if x > grey_to_monochrome_threshold else 0
 
