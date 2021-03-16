@@ -9,4 +9,6 @@ void optimize_rle(unsigned char *eink_framebuffer);
 void rle_extract2(int compressed_size, unsigned char *decompressed_p, unsigned char *compressed, int k);
 
 // Extract a compressed framebuffer (for debugging)
-void rle_extract1(unsigned char decompressed[], int nb_chunks, unsigned char compressed_eink_framebuffer[], const int eink_framebuffer_size, const int chunk_size);
+void rle_extract1(unsigned char decompressed[], int nb_chunks, unsigned char *eink_framebuffer_swapped, const int eink_framebuffer_size, const int chunk_size);
+
+int rle_compress_v2(unsigned char *array_to_compress, unsigned char tmp_array[], int nb_chunks, uint16_t **added_compression_arr, const int chunk_size);

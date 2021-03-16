@@ -9,52 +9,41 @@ import io
 from random import randint
 import numpy as np
 import threading
-######### Settings #########
-x_offset = 70                      # The screen will be captured x_offset number of pixels to the right from the top left corner
-y_offset = 140                     # The screen will be captured y_offset number of pixels from the top from the top left corner
-sleep_time = 150                    # number of miliseconds to sleep after capturing and piping the screen. lower value means higher framerate
-grey_to_monochrome_threshold = 200 # when converting the 8bpp greyscale image to monochrome this threshold establishes 
-                                   # which values will be pure black and which will be pure white. ie: with threshold 200
-                                   # all bytes with value more than 200 the pixel will become white, otherwise will become black
-############################        
-width_res = 1200
-height_res = 825
-width_res2 = width_res + x_offset
-height_res2 = height_res + y_offset
-tot_nb_pixels = height_res * width_res
+   
+width_res = 0
+height_res = 0
+width_res2 = 0
+height_res2 = 0
+tot_nb_pixels = 0
 
-chunk_size = int(width_res*height_res/8/8)
-monitor = {"top": y_offset, "left": x_offset,
-           "width": width_res, "height": height_res} 
+chunk_size = 0
+# monitor = {"top": y_offset, "left": x_offset,
+#            "width": width_res, "height": height_res} 
 
 working_dir = os.getcwd()
 
 first_white_arr_array = np.full((tot_nb_pixels), 255, dtype=np.uint8)
 np_image_file = np.full((tot_nb_pixels), 0, dtype=np.uint8)
-
 eight_bpp_bytearr_list = [first_white_arr_array, np_image_file]
-
 byte_string_list = [bytearray([1] * 1*1), bytearray(b'\x00')]
-
-eight_bpp_frame_list2 = [
-    list([1] * width_res*height_res), list([1] * width_res*height_res)]
 
 dif_list = bytearray(height_res)
 dif_list_sum = 0
 switcher = 0
-fifo_path = "/tmp/epdiy_pc_monitor0"
-fifo_path1 = "/tmp/epdiy_pc_monitor1"
+pad_bytes = 0
+
 input_file = ""
 tty.setcbreak(sys.stdin)
 
-try:
-    os.mkfifo(fifo_path)
-except OSError as oe:
-    pass
-try:
-    os.mkfifo(fifo_path1)
-except OSError as oe:
-    pass
+def create_pipes(output_pipe, input_pipe):
+    try:
+        os.mkfifo(output_pipe)
+    except OSError as oe:
+        pass
+    try:
+        os.mkfifo(input_pipe)
+    except OSError as oe:
+        pass
 
 
 def get_nb_bytes_pad():
@@ -65,11 +54,6 @@ def get_nb_bytes_pad():
         tmp_width += 8
         if rem == 0:
             return x
-
-
-pad_bytes = get_nb_bytes_pad()
-line_with_pad = int((width_res / 8) + pad_bytes)
-
 
 def get_raw_pixels(image_file, file_path, save_raw_file, switcher):
     output = io.BytesIO()
@@ -136,28 +120,36 @@ def generate_cursor():
     cursor = [[bp]]
     for y in range(12):
         current_line.append(bp)
+        current_line.append(bp)
+
         current_line_bytes = bp
-        for l in range(y):
+        current_line_bytes += bp
+
+        for l in range(y-2):
             current_line.append(wp)
             current_line_bytes += wp
         current_line.append(bp)
+        current_line.append(bp)
+
         current_line_bytes += bp
+        current_line_bytes += bp
+
         cursor.append(current_line[:])
         current_line.clear()
 
-    current_line = [bp, wp, wp, wp, wp, wp, wp, bp, bp, bp, bp, bp, bp]
+    current_line = [bp, bp, wp, wp, wp, wp, wp, bp, bp, bp, bp, bp, bp]
     cursor.append(current_line[:])
     current_line.clear()
-    current_line = [bp, wp, wp, wp, bp, wp, wp, bp]
+    current_line = [bp, bp, wp, wp, bp, wp, bp, bp]
     cursor.append(current_line[:])
     current_line.clear()
-    current_line = [bp, wp, wp, bp, wp, bp, wp, wp, bp]
+    current_line = [bp, bp, wp, bp, wp, bp, wp, bp, bp]
     cursor.append(current_line[:])
     current_line.clear()
-    current_line = [bp, wp, bp, wp, wp, bp, wp, wp, bp]
+    current_line = [bp, bp, bp, wp, wp, bp, wp, bp, bp]
     cursor.append(current_line[:])
     current_line.clear()
-    current_line = [bp, bp, wp, wp, wp, wp, bp, wp, wp, bp]
+    current_line = [bp, bp, wp, wp, wp, wp, bp, wp, bp, bp]
     cursor.append(current_line[:])
     current_line.clear()
     current_line = [bp, wp, wp, bp]  # 6 spaces before , list number 18
@@ -212,24 +204,117 @@ def draw_cursor():
         sct_img.raw[linear_coor+(h*width_res*4)+offset:linear_coor +
                     (h*width_res*4)+offset+8] = byte_array_cursor[19]
         # print("inside")
-def check_key_presses(pid0, pid1):
+def check_key_presses(PID_list):
     x = 0
     orig_settings = termios.tcgetattr(sys.stdin)
 
-    while x != chr(27): # ESC
-        x=sys.stdin.read(1)[0]
+    while 1:  # ESC
+        x = sys.stdin.read(1)[0]
         if x == 'q':
-            os.kill(pid1, 9)
-
-            os.kill(pid0, 9)
-
             print("exiting")
+            for v in range(len(PID_list)-1, 0, -1):
+                if PID_list[v] != None:
+                    os.kill(PID_list[v], 9)
+            os.kill(PID_list[0], 9)
+
         print("You pressed", x)
 
-    termios.tcsetattr(sys.stdin, termios.TCSADRAIN, orig_settings) 
+    termios.tcsetattr(sys.stdin, termios.TCSADRAIN, orig_settings)
 
+class display_settings:
+    def __init__(self, settings_list):
+        self.ip_address = settings_list[0][1]
+        self.width = int(settings_list[1][1])
+        self.height = int(settings_list[2][1])
+        self.x_offset = int(settings_list[3][1])
+        self.y_offset = int(settings_list[4][1])
+        self.rotation = int(settings_list[5][1])
+        self.grey_to_monochrome_threshold =  int(settings_list[6][1]) 
+        self.sleep_time= int(settings_list[7][1]) 
+        self.display_id = int(settings_list[8][1])
+        self.framebuffer_cycles = int(settings_list[9][1])
+        self.rmt_high_time =  int(settings_list[10][1])
+        self.skipping_threshold =  int(settings_list[11][1])
+        self.nb_chunks =  int(settings_list[12][1])
+        self.disable_logging = settings_list[13]
+
+# display_index = 0
+display_list = []
+display_conf = []
+def generate_display_class(display_conf):
+    display_list.append(display_settings(display_conf))
+
+def get_display_settings(conf_file, disable_logging):
+    #global display_index
+    display_conf.clear()
+    ins = open(f'{working_dir}/{conf_file}', "r")
+    for line in ins:
+        number_strings = line.split()  # Split the line on runs of whitespace
+        #numbers = [int(n) for n in number_strings]  # Convert to integers
+        display_conf.append(number_strings)  # Add the "row" to your list.
+    display_conf.append(disable_logging)
+    generate_display_class(display_conf)
+    
 
 with mss.mss() as sct:
+    args = str(sys.argv)
+    
+    disable_logging = 0
+    child_process = 0
+
+    try:
+        ret = sys.argv.remove("-silent")
+        disable_logging = 1
+    except: pass
+    try:
+        ret = sys.argv.remove("child")
+        child_process = 1
+    except: pass
+    nb_arg = len(sys.argv)
+    nb_displays = nb_arg -1
+
+    # for x in range(nb_arg-1):
+    #     if sys.argv[x] == "-silent":
+    #         disable_logging = 1
+    #         ret = sys.argv.remove("-silent")
+    #     if sys.argv[x] == "child":
+    #         child_process = 1
+    #         ret = sys.argv.remove("child")
+    for x in range(nb_displays):
+        get_display_settings(sys.argv[x+1], disable_logging)
+    
+    ip_address = display_list[0].ip_address
+    width_res = display_list[0].width
+    height_res = display_list[0].height
+    x_offset = display_list[0].x_offset                      
+    y_offset = display_list[0].y_offset
+    rotation =  display_list[0].rotation
+    grey_to_monochrome_threshold =  display_list[0].grey_to_monochrome_threshold
+    sleep_time = display_list[0].sleep_time
+    display_id = display_list[0].display_id
+    framebuffer_cycles = display_list[0].framebuffer_cycles
+    rmt_high_time =  display_list[0].rmt_high_time
+    skipping_threshold =  display_list[0].skipping_threshold
+    nb_chunks =  display_list[0].nb_chunks
+    #disable_logging
+    global line_with_pad
+    pad_bytes = get_nb_bytes_pad()
+    line_with_pad = int((width_res / 8) + pad_bytes)
+    width_res2 = width_res + x_offset
+    height_res2 = height_res + y_offset
+    tot_nb_pixels = height_res * width_res
+    chunk_size = int(width_res*height_res/8/8)
+    monitor = {"top": y_offset, "left": x_offset,
+            "width": width_res, "height": height_res} 
+    first_white_arr_array = np.full((tot_nb_pixels), 255, dtype=np.uint8)
+    np_image_file = np.full((tot_nb_pixels), 0, dtype=np.uint8)
+
+    eight_bpp_bytearr_list = [first_white_arr_array, np_image_file]
+
+    byte_string_list = [bytearray([1] * 1*1), bytearray(b'\x00')]
+
+    dif_list = bytearray(height_res)
+                  
     use_bitmapf_dec = 0
     save_raw_file = 0
     open_from_disk = 0
@@ -241,7 +326,7 @@ with mss.mss() as sct:
     check_for_difference = 0
     set_image_size_to_source_res = 0
     ###################
-    pipe_bit_depth = 8
+    pipe_bit_depth = 1
     pipe_output = 1
     enable_raw_output = 1
     mode = 2
@@ -249,20 +334,50 @@ with mss.mss() as sct:
     check_for_difference_esp = 1
     ###################
     generate_cursor()
-
-
-    if pipe_output and start_process:
-        R = subprocess.Popen([f'{working_dir}/process_capture'])
+    try:
+        os.chdir(f'{working_dir}/pc_host_app')
+    except:pass
+    PID_list = []
+    working_dir = os.getcwd()
     pid0 = os.getpid()
-    pid1 = R.pid
-    thread1 = threading.Thread(target=check_key_presses, args=(pid0, pid1))
-    thread1.start()
+    PID_list.append(pid0)
+
+    if pipe_output and start_process and child_process == 0:
+        for x in range(nb_displays):  
+            R = subprocess.Popen([f'{working_dir}/process_capture',  f'{display_list[x].ip_address}', f'{display_list[x].display_id}',
+             f'{display_list[x].width}', f'{display_list[x].height}',    f'{display_list[x].framebuffer_cycles}', 
+             f'{display_list[x].rmt_high_time}', f'{display_list[x].skipping_threshold}', f'{display_list[x].nb_chunks}', 
+             f'{display_list[x].disable_logging}'])
+            PID_list.append(R.pid)
+    else:
+        pid1 = None
+
+
+    nb_arg = len(sys.argv)
+    for u in range(nb_displays-1):
+        if disable_logging:         
+            P = subprocess.Popen([f'python3',  'screen_capture.py',  f'{sys.argv[u+2]}', '-silent', 'child'])
+        else:
+            P = subprocess.Popen([f'python3',  'screen_capture.py',  sys.argv[u+2], 'child'])
+        PID_list.append(P.pid)
+        
+    if child_process == 0:
+        thread1 = threading.Thread(target=check_key_presses, args=(PID_list,))
+        thread1.start()
+    #for x in range 
 
     if pipe_output:
+        output_pipe = f"/tmp/epdiy_pc_monitor_a_{display_id}"
+
+        input_pipe = f"/tmp/epdiy_pc_monitor_b_{display_id}"
+        create_pipes(output_pipe, input_pipe)
+
         print("Opening pipes...")
-        fd0 = os.open(fifo_path, os.O_WRONLY)
-        fd1 = os.open(fifo_path1, os.O_RDONLY)
+        fd1 = os.open(input_pipe, os.O_RDONLY)
+
+        fd0 = os.open(output_pipe, os.O_WRONLY)
         print("Pipes opened")
+
 
     global sct_image
     complete_output_file = f'{working_dir}/image_mode_{mode}.bmp'
@@ -291,7 +406,8 @@ with mss.mss() as sct:
         if mode == 1:
             # convert image to black and white
             image_file = image_file.convert('1')
-            #image_file   = image_file.rotate(90,  expand=True)
+            if rotation != 0:
+                image_file   = image_file.rotate(90,  expand=True)
             image_file = image_file.transpose(Image.FLIP_TOP_BOTTOM)
 
         elif mode == 2:
@@ -307,7 +423,8 @@ with mss.mss() as sct:
             eight_bpp_bytearr_list[switcher] = np_image_file
 
             image_file = image_file.transpose(Image.FLIP_TOP_BOTTOM) #flip the image so that the first bytes contain the pixel data of the first lines
-            #image_file   = image_file.rotate(90,  expand=True)
+            if rotation != 0:
+                image_file   = image_file.rotate(rotation,  expand=True)
 
         if enable_raw_output: 
             raw_files = get_raw_pixels(
@@ -319,6 +436,7 @@ with mss.mss() as sct:
                 byte_frag = pipe_output_f(raw_files[0])  # 1bpp->raw_files[0]
             elif pipe_bit_depth == 8:
                 byte_frag = pipe_output_f(np_image_file)  # 1bpp->raw_files[0]
-        print(f"capturing screen took {((time.time() - t0)*1000):0>5f}ms")
+        if disable_logging == 0:
+            print(f"Display ID: {display_id}, capture took {int(((time.time() - t0)*1000))}ms")
         time.sleep(sleep_time/1000)
 
