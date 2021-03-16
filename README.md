@@ -42,7 +42,7 @@ pip install  numpy
 
 #### Installation:
 
-1) Flash the demo example on the example folder of the Epdiy repository to verify that it is working correctly.
+1) Once you have the board, flash the demo example on the example folder of the Epdiy repository to verify that it is working correctly.
 
 3)  Get the Pc Monitor application repository:
 ```bash
@@ -67,46 +67,78 @@ IP Address:  xxx.xxx.xxx.xxx
 
 (where xxx.xxx.xxx.xxx is an ip address)
 
-go to *~/epdiy/examples/pc_monitor/pc_host_app/*, open *main.cpp* and change the ip address of the variable *esp32-ip-address*  in line 22 to the ip address displayed in the terminal.
+Note it down.
 
-7) Build the pc-host application:
+7) Add the ip address to a display configuration file: 
+
+Open *example_display.conf* in  *~/epdiy/examples/pc_monitor/pc_host_app/* with a text editor and change the IP address in the first line to the one you noted down before
+
+
+8) Build the pc-host application:
 On a new terminal:
 ```bash
 cd   ~/epdiy/examples/pc_monitor/pc_host_app/
 g++  main.cpp generate_eink_framebuffer.cpp rle_compression.cpp utils.cpp -o process_capture -I include
 
 ```
-8) Now the pc is ready to start the mirroring. If the board is ready to start mirroring it will display a message saying "Socket listening ".
+9) Now the pc is ready to start the mirroring. If the board is ready to start mirroring it will display a message saying "Socket listening ".
 To start the mirroring execute:
 ```bash
-python3 screen_capture.py
+python3 screen_capture.py example_display.conf
 
 ```
 
 Important: always exit the pc host application by pressing the letter **q**
 
 
-#### Settings:
-The following settings can be changed to experiment, or the defaults can also be used. 
-- *greyscale_to_monochrome_threshold*  in *screen_capture.py* line 16             
-When converting the capture from 256 greyscale shades to black and white monochrome a threshold is used to determine which shades will become plain black and which plain white. The default is 200 and it improves drawing black letters on white background. To change the value of that threshold change the value of the variable *greyscale_to_monochrome_threshold* 
-- *x_offset* and *y_offset* in *screen_capture.py* line 13 and 14            
-They set how many pixels away for the top left corner the screen will be captured. ie. setting both to zero will capture 1200x825 pixels from the extreme top left corner of the screen. setting them to 100 and 50 will capture 1200x825 pixels 100 pixels to the right and 50 pixels from the top left corner of the screen
-- *sleep_time* in  *screen_capture.py* line 15
-Sets the amount of time in miliseconds to sleep after each capture.
-- *esp32_ip_address* in *../examples/pc_host_app/main.cpp*
-Sets the ip address of the esp32 for the pc host application to connect to.
-- *nb_times_to_write_framebuffer*  in *~/epdiy/examples/pc_monitor/main/pc_monitor.c* line 16                
-Because of the way that eink displays work, writing the same framebuffer to the display has the effect of getting deeper blacks and whites. The variable *nb_times_to_write_framebuffer* defines the number of times to write the current eink framebuffer to the display. Increases draw time.
-- *rmt_high_time* in *~/epdiy/examples/pc_monitor/main/pc_monitor.c *line 17         
-Increases the high tick time of the CKV signal. A higher value makes blacks blacker and whites whiter. Increases draw time.
+
+#### Creating configuration files and settings:
+The pc host application reads the settings from a *.conf* file passed as an argument when running *screen_capture.py*. Inside a display configuration file there are the following settings:
+
+- *ip_address* : the IP address of the ESP32 module to connect to
+
+- *width* : the resolution width of the display
+
+- *height*: the resolution height of the display
+
+- *x_offset* and *y_offset*      
+They set how many pixels away for the top left corner the screen will be captured. ie. if the resolution is 1200x825, setting both to zero will capture 1200x825 pixels from the extreme top left corner of the screen. setting them to 100 and 50 will capture 1200x825 pixels 100 pixels to the right and 50 pixels from the top left corner of the screen
+
+- *rotation*: can be set to 180 to if using a display upside down
+
+- *grey_monochrome_threshold*:
+When converting the capture from 256 greyscale shades to black and white monochrome a threshold is used to determine which shades will become plain black and which plain white. The default is 200 and it improves drawing black letters on white background.
+
+- *sleep_time*: amount of time in miliseconds to pause the program after capturing a frame.
+ 
+- *id*: Number to identidy each display. Has to be different for each display
+
+- *framebuffer_cycles*: Defines the number of times to write the current eink framebuffer to the display.  Because of the way that eink displays work, writing the same framebuffer to the display has the effect of getting deeper blacks and whites. Increases draw time.
+
+- *rmt_high_time*: Defines the high tick time of the CKV signal. A higher value makes blacks blacker and whites whiter. Increases draw time.
+
+#### Using multiple displays at the same time
+
+In the last version support for using multiple displays at the same time was added. For each display it is required to create a configuration file. 
+Once the configuration files are created run them as
+
+```bash
+python3 screen_capture.py display0.conf
+```
+```bash
+python3 screen_capture.py display1.conf
+```
+```bash
+python3 screen_capture.py display2.conf
+```
+Each from a different terminal
+
 
 ------------
 #### Support for other displays
--The project has been tested using a board revision 4 and a ED097TC2 display. Check for the list of other  displays supported by the Epdiy board on https://github.com/vroland/epdiy . Those displays should work but are untested. If the display you want to try has the same resolution of the ED097TC2, that is 1200x825, it should be enough to select the correct display type in the menuconfig Epdiy section.
-If the display you want to try has a different resolution, other than selecting it in the menuconfig, you should also:
-1) open *~/epdiy/examples/pc_monitor/pc_host_app/main.cpp*, go to line 23 and change the values of the variables *width_resolution* and  *height_resolution* to the width and height resolution of your display.
-2)  open  _~/epdiy/examples/pc_monitor/pc_host_app/screen_capture.py_, go to line 20 and change the values of the variables  *width_res*  and  *height_res*  to the width and height resolution of your display.
+
+- The project has been tested using a board revision 4 and a ED097TC2 display. Check for the list of other  displays supported by the Epdiy board on https://github.com/vroland/epdiy . Those displays should work but are untested. If the display you want to try has the same resolution of the ED097TC2, that is 1200x825, it should be enough to select the correct display type in the menuconfig Epdiy section.
+If the display you want to try has a different resolution, other than selecting it in the menuconfig, you should also specify its resolution in its display configuration file.
  ------------
 
 
@@ -114,6 +146,5 @@ If the display you want to try has a different resolution, other than selecting 
 - Organize the code better
 - Improve ghosting
 - Optimize data transfer between pc and board
-- Add support for quad grid configuration (four displays in grid configuration)
 
 
