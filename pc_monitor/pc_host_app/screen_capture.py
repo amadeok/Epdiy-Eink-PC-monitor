@@ -319,7 +319,7 @@ with mss.mss() as sct:
     use_bitmapf_dec = 0
     save_raw_file = 0
     open_from_disk = 0
-    start_process = 0
+    start_process = 1
     check_compressor = 0
     test_extractor = 0
     save_chunck_files = 0
