@@ -251,7 +251,8 @@ def get_display_settings(conf_file, disable_logging):
     for line in ins:
         number_strings = line.split()  # Split the line on runs of whitespace
         #numbers = [int(n) for n in number_strings]  # Convert to integers
-        display_conf.append(number_strings)  # Add the "row" to your list.
+        if line != '' and line != '\n':
+            display_conf.append(number_strings)  # Add the "row" to your list.
     display_conf.append(disable_logging)
     generate_display_class(display_conf)
     
@@ -318,7 +319,7 @@ with mss.mss() as sct:
     use_bitmapf_dec = 0
     save_raw_file = 0
     open_from_disk = 0
-    start_process = 1
+    start_process = 0
     check_compressor = 0
     test_extractor = 0
     save_chunck_files = 0
