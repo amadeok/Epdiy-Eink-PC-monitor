@@ -56,7 +56,8 @@ uint8_t *draw_white_bytes;
 uint8_t *draw_black_bytes;
 uint8_t *line_changed;
 int16_t total_lines_changed[1] = {0};
-int16_t prev_total_lines_changed =  0;
+int16_t prev_total_lines_changed = 0;
+volatile uint8_t mouse_moved = 0;
 
 uint16_t *settings;
 //bool already_got_settings = false;
@@ -269,12 +270,11 @@ static void download_and_extract(const int sock)
 
     recv(sock, ready1, 6, 0);
 
-    // if (ready1[5] == 's')
-    // {
-    //   printf("Clearing screen \n");
-    //   epd_clear_area(epd_full_screen());
-    //   vTaskDelay(500 / portTICK_PERIOD_MS);
-    // }
+    if (ready1[0] == 'm')
+      mouse_moved = 1;
+    else
+      mouse_moved = 0;
+    
 
     recv(sock, chunk_lenghts, nb_chunks * 4, 0);
 
@@ -283,9 +283,9 @@ static void download_and_extract(const int sock)
       memcpy(chunk_lenghts_int + (a * 1), chunk_lenghts + a * 4, 4 * sizeof(uint8_t));
       // chunk_lenghts_int[a] = chunk_lenghts[(a * 2)] | chunk_lenghts[(a * 2) + 1] << 8;
       // printf(" %d %d ", chunk_lenghts[(a*2)], chunk_lenghts[(a*2)+1]);
-    //  printf(" %d ", chunk_lenghts_int[a]);
+      //  printf(" %d ", chunk_lenghts_int[a]);
     }
-   // printf("\n");
+    // printf("\n");
 
     long time1 = xTaskGetTickCount();
     recv(sock, line_changed, height_resolution + 2, 0);
@@ -300,7 +300,7 @@ static void download_and_extract(const int sock)
     // printf("line changed %d, prev_total_lines_changed %d, 3rd %d \n", total_lines_changed[0], prev_total_lines_changed, prev_total_lines_changed_2); //, xTaskGetTickCount() - time2 );
 
     compressed_size = chunk_lenghts_int[0];
-   // printf("cs0 %d \n", compressed_size);
+    // printf("cs0 %d \n", compressed_size);
     if (compressed_size < buf_size)
       buf_size = compressed_size;
     do
@@ -326,7 +326,7 @@ static void download_and_extract(const int sock)
     }
     // delta = xTaskGetTickCount() - time1;
     //  printf("down took : %d ", delta);
-   // printf("tot %d \n", tot);
+    // printf("tot %d \n", tot);
 //   long time2 = xTaskGetTickCount();
 #if MULTITASK == 0
     rle_extract1(compressed_size, get_current_chunk_ptr(0), compressed_chunk);
@@ -387,10 +387,10 @@ static void download_and_extract(const int sock)
 
     printf("Download and extract took : %lu\n", xTaskGetTickCount() - time1);
 #if MULTITASK == 0
- //   if (enable_skipping == 1)
-      pc_monitor_feed_display_with_skip(total_lines_changed[0], prev_total_lines_changed, prev_total_lines_changed_2);
-  //  else
-  //    pc_monitor_feed_display(total_lines_changed[0], prev_total_lines_changed, prev_total_lines_changed_2);
+    //   if (enable_skipping == 1)
+    pc_monitor_feed_display_with_skip(total_lines_changed[0], prev_total_lines_changed, prev_total_lines_changed_2);
+    //  else
+    //    pc_monitor_feed_display(total_lines_changed[0], prev_total_lines_changed, prev_total_lines_changed_2);
 #endif
     frame_counter++;
   }

@@ -37,6 +37,8 @@ int frame_counter = 0;
 volatile int renderer_chunk_counter;
 volatile int downloader_chunk_counter;
 extern volatile int mirroring_active;
+extern volatile uint8_t mouse_moved;
+
 extern uint8_t ready1[6];
 extern uint8_t *line_changed;
 uint8_t **framebuffer_chunks; //array of pointers pointing to the decompressed chunks of framebuffer
@@ -85,7 +87,7 @@ void IRAM_ATTR pc_monitor_feed_display_with_skip(int total_lines_changed, int pr
 {
   long time2 = xTaskGetTickCount();
   int framebuffer_cycles_final;
-  if (total_lines_changed < framebuffer_cycles_2_threshold && prev_total_lines_changed < framebuffer_cycles_2_threshold && prev_total_lines_changed_2 < framebuffer_cycles_2_threshold)
+  if (mouse_moved == 1 && total_lines_changed < framebuffer_cycles_2_threshold && prev_total_lines_changed < framebuffer_cycles_2_threshold && prev_total_lines_changed_2 < framebuffer_cycles_2_threshold)
     framebuffer_cycles_final = framebuffer_cycles_2;
   else
     framebuffer_cycles_final = framebuffer_cycles;
@@ -138,7 +140,7 @@ void IRAM_ATTR pc_monitor_feed_display(int total_lines_changed, int prev_total_l
 {
   long time2 = xTaskGetTickCount();
   int framebuffer_cycles_final;
-  if (total_lines_changed < framebuffer_cycles_2_threshold && prev_total_lines_changed < framebuffer_cycles_2_threshold && prev_total_lines_changed_2 < framebuffer_cycles_2_threshold)
+  if (mouse_moved == 1 && total_lines_changed < framebuffer_cycles_2_threshold && prev_total_lines_changed < framebuffer_cycles_2_threshold && prev_total_lines_changed_2 < framebuffer_cycles_2_threshold)
     framebuffer_cycles_final = framebuffer_cycles_2;
   else
     framebuffer_cycles_final = framebuffer_cycles;

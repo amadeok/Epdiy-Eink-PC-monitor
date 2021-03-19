@@ -48,6 +48,7 @@ int total_nb_pixels, eink_framebuffer_size, chunk_size, nb_chunks = 1;
 int source_image_bit_depth = 1;
 bool disable_logging;
 uint32_t loop_counter[1] = {0};
+int mouse_moved = 0;
 
 uint8_t ready0[6];
 uint8_t ready1[6];
@@ -59,11 +60,10 @@ void wifi_transfer(unsigned char compressed_eink_framebuffer[], int compressed_f
 {
 
     int ret = 0, buf_size = 4096, tot = 0, tot2 = 0, len = 0;
-    if (loop_counter[0] != refresh_every_x_frames)
-        send(socket_desc, "ready1", 6, 0);
+    if (mouse_moved == 1)
+        send(socket_desc, "moved1", 6, 0);
     else
     {
-        //   send(socket_desc, "refres", 6, 0);
         send(socket_desc, "ready1", 6, 0);
     }
     if (loop_counter[0] == refresh_every_x_frames + 1)
@@ -112,7 +112,7 @@ void send_refresh_framebuffers(unsigned char *padded_2bpp_framebuffer_current, u
 
     memset(padded_2bpp_framebuffer_current, 85, eink_framebuffer_size);
     rle_compress(padded_2bpp_framebuffer_current, tmp_array, nb_chunks, compressed_eink_framebuffer, eink_framebuffer_size, chunk_size);
-        for (int g = 0; g < nb_chunks * 4; g += 4)
+    for (int g = 0; g < nb_chunks * 4; g += 4)
     {
         unsigned int number2 = htonl(compressed_chunk_lengths[g / 4]);
         memcpy(compressed_chunk_lengths_in_bytes + g, &compressed_chunk_lengths[g / 4], 4);
@@ -234,6 +234,11 @@ static int mirroring_task()
             close(socket_desc);
             exit(EXIT_SUCCESS);
         }
+        if (ack2[1] == 1)
+            mouse_moved = 1;
+        else
+            mouse_moved = 0;
+
         long t0 = getTick();
         read(fd0, line_changed, height_resolution);
 
@@ -255,12 +260,11 @@ static int mirroring_task()
                 memcpy(padded_2bpp_framebuffer_previous, padded_2bpp_framebuffer_current, eink_framebuffer_size);
             else if (loop_counter[0] == refresh_every_x_frames)
             {
-              //  memcpy(padded_2bpp_framebuffer_previous, padded_2bpp_framebuffer_current, eink_framebuffer_size);
-              //  printf("loop_counter[0] == refresh_every_x_frames\n");
-              //  memset(source_1bpp, 255, total_nb_pixels / 8);
+                //  memcpy(padded_2bpp_framebuffer_previous, padded_2bpp_framebuffer_current, eink_framebuffer_size);
+                //  printf("loop_counter[0] == refresh_every_x_frames\n");
+                //  memset(source_1bpp, 255, total_nb_pixels / 8);
                 send_refresh_framebuffers(padded_2bpp_framebuffer_current, compressed_eink_framebuffer);
                 memset(padded_2bpp_framebuffer_previous, 85, total_nb_pixels / 4);
-
             }
             //  memset(padded_2bpp_framebuffer_previous, 85, eink_framebuffer_size);
 
@@ -311,9 +315,9 @@ static int mirroring_task()
         {
             wifi_transfer(compressed_eink_framebuffer, compressed_framebuffer_size);
             repeat_counter = 0;
-           // printf("loop_counter %d\n", loop_counter[0]);
-            if (total[0] > 85) //don't increase the counter to clear te display if only 85 lines have changed 
-            loop_counter[0]++;
+            // printf("loop_counter %d\n", loop_counter[0]);
+            if (total[0] > 85) //don't increase the counter to clear te display if only 85 lines have changed
+                loop_counter[0]++;
         }
         if (disable_logging == 0)
             printf("Processing time %dms\n", getTick() - t0);
@@ -326,7 +330,7 @@ int main(int argc, char *argv[])
 {
     int8_t nb_args = argc;
     int8_t settings_size[1];
-    settings_size[0] = (nb_args - 7)*2;
+    settings_size[0] = (nb_args - 7) * 2;
     int16_t *esp32_settings = (int16_t *)calloc(settings_size[0], sizeof(uint8_t));
 
     //  printf("settings size %d \n", settings_size[0]);
@@ -346,7 +350,7 @@ int main(int argc, char *argv[])
     esp32_settings[5] = std::stoi(argv[11]);
     esp32_settings[6] = std::stoi(argv[12]);
 
-    disable_logging = std::stoi(argv[settings_size[0]-1]);
+    disable_logging = std::stoi(argv[settings_size[0] - 1]);
 
     printf("esp32_ip_address: %s\n", esp32_ip_address);
     printf("display id: %s\n", display_id);
@@ -359,7 +363,6 @@ int main(int argc, char *argv[])
     printf("framebuffer_cycles_2: %d\n", esp32_settings[4]);
     printf("framebuffer_cycles_2_threshold: %d\n", esp32_settings[5]);
     printf("nb_chunks: %d\n", esp32_settings[6]);
-
 
     if (disable_logging == 1)
         printf("logging disabled \n");

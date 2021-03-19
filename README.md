@@ -127,7 +127,7 @@ Advanced settings:
 
 - *epd_skip_threshold*: if less than *epd_skip_threshold* rows have changed skipping is enabled for the current frame draw. 
 
-- *framebuffer_cycles_2* and *framebuffer_cycles_2_threshold*: If less than *framebuffer_cycles_2_threshold* number of rows have changed, the current framebuffer will be written *framebuffer_cycles_2* times instead of the value set by *framebuffer_cycles*. Can be used to reduce the draw time when just a few lines have changed such as when moving the cursor.
+- *framebuffer_cycles_2* and *framebuffer_cycles_2_threshold*: If less than *framebuffer_cycles_2_threshold* number of rows have changed, the current framebuffer will be written *framebuffer_cycles_2* times instead of the value set by *framebuffer_cycles*. Can be used to reduce the draw time when just a few lines have changed such as when moving the cursor. This is only active is the mouse is moving
 
 #### Using multiple displays at the same time
 

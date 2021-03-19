@@ -34,6 +34,7 @@ dif_list_sum = 0
 switcher = 0
 pad_bytes = 0
 exiting = 0
+pos2 = pyautogui.position()
 
 input_file = ""
 tty.setcbreak(sys.stdin)
@@ -101,7 +102,7 @@ def check_for_difference_esp_fun(array_list):
         startt += chunk_size
         endd += chunk_size
 
-def pipe_output_f(raw_files):
+def pipe_output_f(raw_files, mouse_moved):
     byte_frag = raw_files
     if child_process ==  0:
         end_val = exiting
@@ -120,8 +121,11 @@ def pipe_output_f(raw_files):
             except: pass
             shm_a.close()
         sys.exit(f'Python capture ID {display_id} terminated')
-    else:
+    elif mouse_moved:
+        os.write(fd0, b'\xf6\x01')
+    else:        
         os.write(fd0, b'\xf6\x00')
+
 
 
     if check_for_difference_esp == 1:
@@ -190,6 +194,8 @@ def draw_cursor():
     global y_offset
     global width_res2
     global height_res2
+    global pos2
+    previous_pos = pos2
     pos2 = pyautogui.position()
     if pos2.x >= x_offset and pos2.x <= width_res2 and pos2.y >= y_offset and pos2.y <= height_res2:
         x_cursor = pos2.x - x_offset
@@ -225,6 +231,10 @@ def draw_cursor():
         sct_img.raw[linear_coor+(h*width_res*4)+offset:linear_coor +
                     (h*width_res*4)+offset+8] = byte_array_cursor[19]
         # print("inside")
+        if previous_pos.x != pos2.x and previous_pos.y != pos2.y:
+            return 1
+        else:
+            return 0
 def check_key_presses(PID_list):
     x = 0
     orig_settings = termios.tcgetattr(sys.stdin)
@@ -237,10 +247,14 @@ def check_key_presses(PID_list):
             if has_childs == 1:
                 shared_buffer[0] = 101
             exiting = 101
-            # for v in range(len(PID_list)-1, 0, -1):
-            #     if PID_list[v] != None:
-            #         os.kill(PID_list[v], 9)
-            # os.kill(PID_list[0], 9)
+            time.sleep(5)
+            try:
+                for v in range(len(PID_list)-1, 0, -1):
+                    if PID_list[v] != None:
+                        os.kill(PID_list[v], 9)
+                os.kill(PID_list[0], 9)
+            except:
+                pass
 
         print("You pressed", x)
 
@@ -450,8 +464,7 @@ with mss.mss() as sct:
 
         sct_img = sct.grab(monitor) #capture screen
 
-        draw_cursor()
-
+        mouse_moved = draw_cursor()
         image_file = Image.frombytes(
             "RGB", sct_img.size, sct_img.bgra, "raw", "RGBX")
 
@@ -489,9 +502,9 @@ with mss.mss() as sct:
             image_file.save(complete_output_file)
         if pipe_output:  # and dif_list_sum
             if pipe_bit_depth == 1:
-                byte_frag = pipe_output_f(raw_files[0])  # 1bpp->raw_files[0]
+                byte_frag = pipe_output_f(raw_files[0], mouse_moved)  # 1bpp->raw_files[0]
             elif pipe_bit_depth == 8:
-                byte_frag = pipe_output_f(np_image_file)  # 1bpp->raw_files[0]
+                byte_frag = pipe_output_f(np_image_file, mouse_moved)  # 1bpp->raw_files[0]
         if disable_logging == 0:
             print(f"Display ID: {display_id}, capture took {int(((time.time() - t0)*1000))}ms")
         time.sleep(sleep_time/1000)
