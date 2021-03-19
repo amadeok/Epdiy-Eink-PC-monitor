@@ -9,7 +9,9 @@ import io
 from random import randint
 import numpy as np
 import threading
-   
+from multiprocessing import shared_memory, resource_tracker
+
+
 width_res = 0
 height_res = 0
 width_res2 = 0
@@ -31,6 +33,7 @@ dif_list = bytearray(height_res)
 dif_list_sum = 0
 switcher = 0
 pad_bytes = 0
+exiting = 0
 
 input_file = ""
 tty.setcbreak(sys.stdin)
@@ -100,8 +103,26 @@ def check_for_difference_esp_fun(array_list):
 
 def pipe_output_f(raw_files):
     byte_frag = raw_files
+    if child_process ==  0:
+        end_val = exiting
+    else: end_val = shared_buffer[0]
 
-    os.write(fd0, b'\xf6')
+    if end_val == 101:
+        os.write(fd0, shared_buffer[0:2])
+        time.sleep(0.5)
+        if child_process == 0:
+            time.sleep(1.5)
+
+            try: shm_a.unlink()
+            except: pass
+        else:
+            try: resource_tracker.unregister(shm_a._name, 'shared_memory')
+            except: pass
+            shm_a.close()
+        sys.exit(f'Python capture ID {display_id} terminated')
+    else:
+        os.write(fd0, b'\xf6\x00')
+
 
     if check_for_difference_esp == 1:
         os.write(fd0, dif_list)
@@ -207,15 +228,19 @@ def draw_cursor():
 def check_key_presses(PID_list):
     x = 0
     orig_settings = termios.tcgetattr(sys.stdin)
-
-    while 1:  # ESC
+    global exiting
+    
+    while 1 and exiting == 0:  # ESC
         x = sys.stdin.read(1)[0]
         if x == 'q':
             print("exiting")
-            for v in range(len(PID_list)-1, 0, -1):
-                if PID_list[v] != None:
-                    os.kill(PID_list[v], 9)
-            os.kill(PID_list[0], 9)
+            if has_childs == 1:
+                shared_buffer[0] = 101
+            exiting = 101
+            # for v in range(len(PID_list)-1, 0, -1):
+            #     if PID_list[v] != None:
+            #         os.kill(PID_list[v], 9)
+            # os.kill(PID_list[0], 9)
 
         print("You pressed", x)
 
@@ -224,19 +249,24 @@ def check_key_presses(PID_list):
 class display_settings:
     def __init__(self, settings_list):
         self.ip_address = settings_list[0][1]
-        self.width = int(settings_list[1][1])
-        self.height = int(settings_list[2][1])
-        self.x_offset = int(settings_list[3][1])
-        self.y_offset = int(settings_list[4][1])
-        self.rotation = int(settings_list[5][1])
-        self.grey_to_monochrome_threshold =  int(settings_list[6][1]) 
-        self.sleep_time= int(settings_list[7][1]) 
-        self.display_id = int(settings_list[8][1])
-        self.framebuffer_cycles = int(settings_list[9][1])
-        self.rmt_high_time =  int(settings_list[10][1])
-        self.skipping_threshold =  int(settings_list[11][1])
-        self.nb_chunks =  int(settings_list[12][1])
-        self.disable_logging = settings_list[13]
+        self.display_id = int(settings_list[1][1])
+        self.width = int(settings_list[2][1])
+        self.height = int(settings_list[3][1])
+        self.x_offset = int(settings_list[4][1])
+        self.y_offset = int(settings_list[5][1])
+        self.rotation = int(settings_list[6][1])
+        self.grey_to_monochrome_threshold =  int(settings_list[7][1]) 
+        self.sleep_time= int(settings_list[8][1]) 
+        self.refresh_every_x_frames = int(settings_list[9][1])
+        self.framebuffer_cycles = int(settings_list[10][1])
+        self.rmt_high_time= int(settings_list[11][1])
+        self.enable_skipping =  int(settings_list[12][1])
+        self.epd_skip_threshold =  int(settings_list[13][1])
+        self.framebuffer_cycles_2 =  int(settings_list[14][1])
+        self.framebuffer_cycles_2_threshold =  int(settings_list[15][1])
+        self.nb_chunks =  int(settings_list[16][1])
+
+        self.disable_logging = settings_list[len(settings_list)-1]
 
 # display_index = 0
 display_list = []
@@ -262,7 +292,7 @@ with mss.mss() as sct:
     
     disable_logging = 0
     child_process = 0
-
+    has_childs = 0
     try:
         ret = sys.argv.remove("-silent")
         disable_logging = 1
@@ -295,7 +325,9 @@ with mss.mss() as sct:
     display_id = display_list[0].display_id
     framebuffer_cycles = display_list[0].framebuffer_cycles
     rmt_high_time =  display_list[0].rmt_high_time
-    skipping_threshold =  display_list[0].skipping_threshold
+    epd_skip_threshold =  display_list[0].epd_skip_threshold
+    framebuffer_cycles_2 = display_list[0].framebuffer_cycles_2
+    framebuffer_cycles_2_threshold = display_list[0].framebuffer_cycles_2_threshold
     nb_chunks =  display_list[0].nb_chunks
     #disable_logging
     global line_with_pad
@@ -343,14 +375,35 @@ with mss.mss() as sct:
     pid0 = os.getpid()
     PID_list.append(pid0)
 
+    # global shared_buffer
+    try: shm_a = shared_memory.SharedMemory(create=True, size=10, name='screen_capture_shm')
+    except: shm_a = shared_memory.SharedMemory(name='screen_capture_shm')
+    shared_buffer = shm_a.buf
+
     if pipe_output and start_process and child_process == 0:
+        shared_buffer[:10] = bytearray([0, 0, 0, 0, 0, 0, 0, 0, 0, 0]) 
+        buffer2 = bytearray(shared_buffer)
         for x in range(nb_displays):  
-            R = subprocess.Popen([f'{working_dir}/process_capture',  f'{display_list[x].ip_address}', f'{display_list[x].display_id}',
-             f'{display_list[x].width}', f'{display_list[x].height}',    f'{display_list[x].framebuffer_cycles}', 
-             f'{display_list[x].rmt_high_time}', f'{display_list[x].skipping_threshold}', f'{display_list[x].nb_chunks}', 
-             f'{display_list[x].disable_logging}'])
+            R = subprocess.Popen([f'{working_dir}/process_capture', 
+             f'{display_list[x].ip_address}',
+              f'{display_list[x].display_id}',
+              f'{display_list[x].width}',
+              f'{display_list[x].height}',
+              f'{display_list[x].refresh_every_x_frames}',
+              f'{display_list[x].framebuffer_cycles}', 
+              f'{display_list[x].rmt_high_time}',
+              f'{display_list[x].enable_skipping}',
+              f'{display_list[x].epd_skip_threshold}',
+              f'{display_list[x].framebuffer_cycles_2}',
+              f'{display_list[x].framebuffer_cycles_2_threshold}',
+              f'{display_list[x].nb_chunks}', 
+              f'{display_list[x].disable_logging}'])
+            time.sleep(0.5)
+            has_childs = 1
+
             PID_list.append(R.pid)
-    else:
+
+    else:   
         pid1 = None
 
 
@@ -361,6 +414,8 @@ with mss.mss() as sct:
         else:
             P = subprocess.Popen([f'python3',  'screen_capture.py',  sys.argv[u+2], 'child'])
         PID_list.append(P.pid)
+        time.sleep(0.5)
+
         
     if child_process == 0:
         thread1 = threading.Thread(target=check_key_presses, args=(PID_list,))

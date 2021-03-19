@@ -1,7 +1,7 @@
 #include <2bitLUTforC_inv.h>
 #include <string.h>
 
-extern int total_nb_pixels;
+extern int total_nb_pixels, refres_every_x_frames;
 
 int loop_counter0 = 1, loop_counter1 = 0;
 

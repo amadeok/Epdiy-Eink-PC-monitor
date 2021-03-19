@@ -49,14 +49,16 @@ uint8_t *compressed_chunk;
 int multitask = 0;
 extern uint8_t **framebuffer_chunks;
 extern uint8_t *second_framebuffer;
-uint8_t *fc0 = NULL, *fc1 = NULL, *fc2 = NULL, *fc3 = NULL, *fc4 = NULL, *fc5 = NULL, *fc6 = NULL, *fc7 = NULL, *fc8 = NULL, *fc9 = NULL;
+uint8_t *fc0, *fc1 = NULL, *fc2 = NULL, *fc3 = NULL, *fc4 = NULL, *fc5 = NULL, *fc6 = NULL, *fc7 = NULL, *fc8 = NULL, *fc9 = NULL;
 
 uint8_t *array_with_zeros;
 uint8_t *draw_white_bytes;
 uint8_t *draw_black_bytes;
 uint8_t *line_changed;
-int16_t total_lines_changed[1];
-uint16_t settings[3];
+int16_t total_lines_changed[1] = {0};
+int16_t prev_total_lines_changed =  0;
+
+uint16_t *settings;
 //bool already_got_settings = false;
 
 int width_resolution = EPD_WIDTH, height_resolution = EPD_HEIGHT;
@@ -65,7 +67,8 @@ int total_nb_pixels, eink_framebuffer_size, chunk_size, nb_chunks = 1, nb_rows_p
 
 int framebuffer_cycles; // sets the number of times to write the current framebuffer to the screen
 int rmt_high_time;      // defined in rmt_pulse.h, a higher value makes blacks blacker and whites whiter
-int skipping_threshold;
+int framebuffer_cycles_2, framebuffer_cycles_2_threshold;
+int enable_skipping, epd_skip_threshold;
 
 uint8_t *chunk_lenghts;
 int32_t *chunk_lenghts_int;
@@ -116,7 +119,7 @@ tcpip_adapter_ip_info_t wifi_task(void *pvParameter)
 {
   // wait for connection
   printf("Main task: waiting for connection to the wifi network... \n");
-  xEventGroupWaitBits(wifi_event_group, CONNECTED_BIT, false, true, 5000);
+  xEventGroupWaitBits(wifi_event_group, CONNECTED_BIT, false, true, 50000000);
   printf("connected!\n");
 
   // print the local IP address
@@ -266,14 +269,12 @@ static void download_and_extract(const int sock)
 
     recv(sock, ready1, 6, 0);
 
-    // if (ready1[5] == 't')
+    // if (ready1[5] == 's')
     // {
-    //   printf("repeating last frame \n");
-    //   pc_monitor_feed_display();
-    //   continue;
+    //   printf("Clearing screen \n");
+    //   epd_clear_area(epd_full_screen());
+    //   vTaskDelay(500 / portTICK_PERIOD_MS);
     // }
-    // else
-    //   printf("downloading new frame \n");
 
     recv(sock, chunk_lenghts, nb_chunks * 4, 0);
 
@@ -282,9 +283,9 @@ static void download_and_extract(const int sock)
       memcpy(chunk_lenghts_int + (a * 1), chunk_lenghts + a * 4, 4 * sizeof(uint8_t));
       // chunk_lenghts_int[a] = chunk_lenghts[(a * 2)] | chunk_lenghts[(a * 2) + 1] << 8;
       // printf(" %d %d ", chunk_lenghts[(a*2)], chunk_lenghts[(a*2)+1]);
-      //  printf(" %d ", chunk_lenghts_int[a]);
+    //  printf(" %d ", chunk_lenghts_int[a]);
     }
-    //   printf("\n");
+   // printf("\n");
 
     long time1 = xTaskGetTickCount();
     recv(sock, line_changed, height_resolution + 2, 0);
@@ -293,12 +294,13 @@ static void download_and_extract(const int sock)
 
     // for (int h = 0; h < height_resolution; h++)
     // total += line_changed[h];
-
+    int prev_total_lines_changed_2 = prev_total_lines_changed;
+    prev_total_lines_changed = total_lines_changed[0];
     memcpy(total_lines_changed, line_changed + height_resolution, 2);
-    printf("line changed %d \n", total_lines_changed[0]); //, xTaskGetTickCount() - time2 );
+    // printf("line changed %d, prev_total_lines_changed %d, 3rd %d \n", total_lines_changed[0], prev_total_lines_changed, prev_total_lines_changed_2); //, xTaskGetTickCount() - time2 );
 
     compressed_size = chunk_lenghts_int[0];
-    // printf("cs0 %d \n", compressed_size);
+   // printf("cs0 %d \n", compressed_size);
     if (compressed_size < buf_size)
       buf_size = compressed_size;
     do
@@ -322,9 +324,9 @@ static void download_and_extract(const int sock)
       epd_poweroff();
       break;
     }
-// delta = xTaskGetTickCount() - time1;
-//  printf("down took : %d ", delta);
-//    printf("tot %d \n", tot);
+    // delta = xTaskGetTickCount() - time1;
+    //  printf("down took : %d ", delta);
+   // printf("tot %d \n", tot);
 //   long time2 = xTaskGetTickCount();
 #if MULTITASK == 0
     rle_extract1(compressed_size, get_current_chunk_ptr(0), compressed_chunk);
@@ -385,7 +387,10 @@ static void download_and_extract(const int sock)
 
     printf("Download and extract took : %lu\n", xTaskGetTickCount() - time1);
 #if MULTITASK == 0
-    pc_monitor_feed_display(total_lines_changed[0]);
+ //   if (enable_skipping == 1)
+      pc_monitor_feed_display_with_skip(total_lines_changed[0], prev_total_lines_changed, prev_total_lines_changed_2);
+  //  else
+  //    pc_monitor_feed_display(total_lines_changed[0], prev_total_lines_changed, prev_total_lines_changed_2);
 #endif
     frame_counter++;
   }
@@ -396,12 +401,16 @@ void receive_settings(const int sock)
   int8_t settings_size[1];
   recv(sock, settings_size, 1, 0);
   printf("settings_size %d \n", settings_size[0]);
+  settings = (uint16_t *)calloc(settings_size[0], sizeof(uint16_t));
 
   int ret = recv(sock, settings, settings_size[0], 0);
   printf("### Settings ### %d \n", ret);
   printf("framebuffer_cycles %d \n", framebuffer_cycles = settings[0]);
   printf("rmt_high_time %d \n", rmt_high_time = settings[1]);
-  printf("skipping_threshold %d \n", skipping_threshold = settings[2]);
+  printf("enable_skipping %d \n", enable_skipping = settings[2]);
+  printf("epd_skip_threshold %d \n", epd_skip_threshold = settings[3]);
+  printf("framebuffer_cycles_2 %d \n", framebuffer_cycles_2 = settings[4]);
+  printf("framebuffer_cycles_2_threshold %d \n", framebuffer_cycles_2_threshold = settings[5]);
 
   printf("################# \n");
   // already_got_settings = true;
@@ -444,6 +453,7 @@ static void tcp_server_task(void *pvParameters)
   if (listen_sock < 0)
   {
     ESP_LOGE(TAG, "Unable to create socket: errno %d", errno);
+    goto CLEAN_UP;
     vTaskDelete(NULL);
     return;
   }
@@ -480,6 +490,7 @@ static void tcp_server_task(void *pvParameters)
     if (sock < 0)
     {
       ESP_LOGE(TAG, "Unable to accept connection: errno %d", errno);
+      goto CLEAN_UP;
       break;
     }
 
@@ -507,9 +518,13 @@ static void tcp_server_task(void *pvParameters)
   }
 
 CLEAN_UP:
+  ESP_LOGI(TAG, "Restarting the board in 2 seconds..");
   close(listen_sock);
+  vTaskDelay(2000 / portTICK_PERIOD_MS);
+  // esp_restart();
   vTaskDelete(NULL);
-  ESP_LOGI(TAG, "Restart the board");
+  wifi_task(NULL);
+  xTaskCreatePinnedToCore(&tcp_server_task, "tcp_server_task", 10000, NULL, 5, NULL, 1);
 }
 
 void init_memory()

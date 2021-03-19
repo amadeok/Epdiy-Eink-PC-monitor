@@ -25,9 +25,8 @@
 #define MULTITASK 1
 extern int framebuffer_cycles; // sets the number of times to write the current framebuffer to the screen
 extern int rmt_high_time;      // defined in rmt_pulse.h, a higher value makes blacks blacker and whites whiter
-extern int skipping_threshold;
 
-#define ENABLE_SKIPPING 0
+extern int enable_skipping, epd_skip_threshold, framebuffer_cycles_2, framebuffer_cycles_2_threshold;
 
 int rmt_low_time = 1;
 volatile int current_buffer = 0;
@@ -82,10 +81,16 @@ void IRAM_ATTR switch_framebuffer()
     current_buffer = 0;
 }
 
-void IRAM_ATTR pc_monitor_feed_display(int total_lines_changed)
+void IRAM_ATTR pc_monitor_feed_display_with_skip(int total_lines_changed, int prev_total_lines_changed, int prev_total_lines_changed_2)
 {
   long time2 = xTaskGetTickCount();
-  for (int i = 0; i < framebuffer_cycles; i++)
+  int framebuffer_cycles_final;
+  if (total_lines_changed < framebuffer_cycles_2_threshold && prev_total_lines_changed < framebuffer_cycles_2_threshold && prev_total_lines_changed_2 < framebuffer_cycles_2_threshold)
+    framebuffer_cycles_final = framebuffer_cycles_2;
+  else
+    framebuffer_cycles_final = framebuffer_cycles;
+
+  for (int i = 0; i < framebuffer_cycles_final; i++)
   {
 
     epd_start_frame();
@@ -94,8 +99,7 @@ void IRAM_ATTR pc_monitor_feed_display(int total_lines_changed)
     {
       current_chunk = get_current_chunk_ptr(h);
       int offset = (h * nb_rows_per_chunk);
-#if ENABLE_SKIPPING == 1
-      if (total_lines_changed < skipping_threshold) //only skip the rows that haven't changed if they are less than the specified threshold
+      if (enable_skipping == 1 && total_lines_changed < epd_skip_threshold) //only skip the rows that haven't changed if they are less in number than the specified threshold
       {
         for (int g = 0; g < nb_rows_per_chunk; g++)
         {
@@ -122,13 +126,38 @@ void IRAM_ATTR pc_monitor_feed_display(int total_lines_changed)
           epd_output_row(rmt_high_time);
         }
       }
-#else
+    }
+    epd_end_frame();
+
+    frame_counter++;
+  }
+  printf("draw time: %lu\n", xTaskGetTickCount() - time2);
+}
+
+void IRAM_ATTR pc_monitor_feed_display(int total_lines_changed, int prev_total_lines_changed, int prev_total_lines_changed_2)
+{
+  long time2 = xTaskGetTickCount();
+  int framebuffer_cycles_final;
+  if (total_lines_changed < framebuffer_cycles_2_threshold && prev_total_lines_changed < framebuffer_cycles_2_threshold && prev_total_lines_changed_2 < framebuffer_cycles_2_threshold)
+    framebuffer_cycles_final = framebuffer_cycles_2;
+  else
+    framebuffer_cycles_final = framebuffer_cycles;
+
+  for (int i = 0; i < framebuffer_cycles_final; i++)
+  {
+
+    epd_start_frame();
+
+    for (int h = 0; h < nb_chunks; h++)
+    {
+      current_chunk = get_current_chunk_ptr(h);
+      int offset = (h * nb_rows_per_chunk);
+
       for (int g = 0; g < nb_rows_per_chunk; g++)
       {
         memcpy(epd_get_current_buffer(), current_chunk + (g * EPD_LINE_BYTES), EPD_LINE_BYTES);
         epd_output_row(rmt_high_time);
       }
-#endif
     }
     epd_end_frame();
 

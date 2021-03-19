@@ -7,7 +7,9 @@
 /**
  * Write the decompressed buffers to the display 
  */
-void IRAM_ATTR pc_monitor_feed_display(int total_lines_changed);
+void IRAM_ATTR pc_monitor_feed_display(int total_lines_changed, int prev_total_lines_changed, int prev_total_lines_changed_2);
+
+void IRAM_ATTR pc_monitor_feed_display_with_skip(int total_lines_changed, int prev_total_lines_changed, int prev_total_lines_changed_2);
 
 uint8_t *get_current_chunk_ptr(int chunk_number);
 

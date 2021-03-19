@@ -43,10 +43,11 @@ unsigned char *received;              // for testing or debugging
 unsigned char *tmp_array;
 
 unsigned char *compressed_eink_framebuffer_ptrs[16]; //array of pointers pointing to chunks of framebuffer
-
+int id, refresh_every_x_frames = 0;
 int total_nb_pixels, eink_framebuffer_size, chunk_size, nb_chunks = 1;
 int source_image_bit_depth = 1;
 bool disable_logging;
+uint32_t loop_counter[1] = {0};
 
 uint8_t ready0[6];
 uint8_t ready1[6];
@@ -58,7 +59,16 @@ void wifi_transfer(unsigned char compressed_eink_framebuffer[], int compressed_f
 {
 
     int ret = 0, buf_size = 4096, tot = 0, tot2 = 0, len = 0;
-    send(socket_desc, "ready1", 6, 0);
+    if (loop_counter[0] != refresh_every_x_frames)
+        send(socket_desc, "ready1", 6, 0);
+    else
+    {
+        //   send(socket_desc, "refres", 6, 0);
+        send(socket_desc, "ready1", 6, 0);
+    }
+    if (loop_counter[0] == refresh_every_x_frames + 1)
+        loop_counter[0] = 0;
+
     int ret2 = send(socket_desc, compressed_chunk_lengths_in_bytes, nb_chunks * 4 * sizeof(unsigned char), 0);
 
     ret2 = send(socket_desc, line_changed, (height_resolution + 2) * sizeof(unsigned char), 0);
@@ -96,6 +106,25 @@ void wifi_transfer(unsigned char compressed_eink_framebuffer[], int compressed_f
     //   array_to_file(received, eink_framebuffer_size, working_dir, "received", 0);
 }
 
+void send_refresh_framebuffers(unsigned char *padded_2bpp_framebuffer_current, unsigned char compressed_eink_framebuffer[])
+{
+    memset(line_changed, 1, height_resolution);
+
+    memset(padded_2bpp_framebuffer_current, 85, eink_framebuffer_size);
+    rle_compress(padded_2bpp_framebuffer_current, tmp_array, nb_chunks, compressed_eink_framebuffer, eink_framebuffer_size, chunk_size);
+        for (int g = 0; g < nb_chunks * 4; g += 4)
+    {
+        unsigned int number2 = htonl(compressed_chunk_lengths[g / 4]);
+        memcpy(compressed_chunk_lengths_in_bytes + g, &compressed_chunk_lengths[g / 4], 4);
+    }
+    wifi_transfer(compressed_eink_framebuffer, 0);
+    recv(socket_desc, ready0, 6, 0);
+    memset(padded_2bpp_framebuffer_current, 170, eink_framebuffer_size);
+    rle_compress(padded_2bpp_framebuffer_current, tmp_array, nb_chunks, compressed_eink_framebuffer, eink_framebuffer_size, chunk_size);
+    wifi_transfer(compressed_eink_framebuffer, 0);
+    recv(socket_desc, ready0, 6, 0);
+}
+
 void print_chunk_sizes()
 {
     for (int h = 0; h < nb_chunks; h++) // for debugging
@@ -126,9 +155,9 @@ static int mirroring_task()
     total_nb_pixels = width_resolution * height_resolution;
     eink_framebuffer_size = total_nb_pixels / 4;
     chunk_size = (eink_framebuffer_size / nb_chunks);
-    int loop_counter = 0;
+
     unsigned char ack[1] = {246};
-    unsigned char ack2[1];
+    unsigned char ack2[2];
     unsigned char ready0[6];
     unsigned char ready1[6];
 
@@ -191,30 +220,49 @@ static int mirroring_task()
         printf("unsupported bit depth\n");
         return -1;
     }
-    int total[] = {0}, repeat_counter = 0;
+    int total[] = {0}, repeat_counter = 0, next = 0;
+    ;
     while (1)
     {
         if (total[0] != 0 && enable_wifi == 1) // if screen didn't change don't wait for ack from board
             recv(socket_desc, ready0, 6, 0);
         write(fd1, ack, 1);
-        read(fd0, ack2, 1);
+        read(fd0, ack2, 2);
+        if (ack2[0] == 101)
+        {
+            printf("C++ app ID %d exiting \n", id);
+            close(socket_desc);
+            exit(EXIT_SUCCESS);
+        }
         long t0 = getTick();
         read(fd0, line_changed, height_resolution);
 
         if (source_image_bit_depth == 1)
+        {
             ret2 = read(fd0, source_1bpp, total_nb_pixels / 8 * sizeof(unsigned char));
+        }
         else if (source_image_bit_depth == 8)
         {
             memcpy(source_8bpp_previous, source_8bpp_current, total_nb_pixels * sizeof(unsigned char));
             ret2 = read(fd0, source_8bpp_current, total_nb_pixels * sizeof(unsigned char));
+            // if (loop_counter[0] == refresh_every_x_frames) //asume the screen is white if we are going to refresh
+            //      memset(source_8bpp_current, 1, total_nb_pixels);
         }
-
-        loop_counter++;
 
         if (source_image_bit_depth == 1)
         {
+            if (loop_counter[0] != refresh_every_x_frames) //asume the screen is white if we are going to refresh
+                memcpy(padded_2bpp_framebuffer_previous, padded_2bpp_framebuffer_current, eink_framebuffer_size);
+            else if (loop_counter[0] == refresh_every_x_frames)
+            {
+              //  memcpy(padded_2bpp_framebuffer_previous, padded_2bpp_framebuffer_current, eink_framebuffer_size);
+              //  printf("loop_counter[0] == refresh_every_x_frames\n");
+              //  memset(source_1bpp, 255, total_nb_pixels / 8);
+                send_refresh_framebuffers(padded_2bpp_framebuffer_current, compressed_eink_framebuffer);
+                memset(padded_2bpp_framebuffer_previous, 85, total_nb_pixels / 4);
 
-            memcpy(padded_2bpp_framebuffer_previous, padded_2bpp_framebuffer_current, eink_framebuffer_size);
+            }
+            //  memset(padded_2bpp_framebuffer_previous, 85, eink_framebuffer_size);
 
             generate_eink_framebuffer_v1(source_1bpp, padded_2bpp_framebuffer_current, padded_2bpp_framebuffer_previous, eink_framebuffer);
 
@@ -244,15 +292,28 @@ static int mirroring_task()
 
         total[0] = 0;
         uint16_t total2[1];
-        for (int h = 0; h < height_resolution; h++)
-            total[0] += line_changed[h];
-        memcpy(line_changed + height_resolution, total, 2);
-        memcpy(total2, line_changed + height_resolution, 2);
+
+        if (loop_counter[0] == refresh_every_x_frames || loop_counter[0] == refresh_every_x_frames + 1)
+        {
+            memset(line_changed, 1, height_resolution);
+            total[0] = height_resolution;
+        }
+        //  if (loop_counter[0] != refresh_every_x_frames)
+        else
+        {
+            for (int h = 0; h < height_resolution; h++)
+                total[0] += line_changed[h];
+            memcpy(line_changed + height_resolution, total, 2);
+            memcpy(total2, line_changed + height_resolution, 2);
+        }
 
         if (total[0] != 0 && enable_wifi == 1 && FT245MODE == 0) //send framebuffer only if current capture is different than previous
         {
             wifi_transfer(compressed_eink_framebuffer, compressed_framebuffer_size);
             repeat_counter = 0;
+           // printf("loop_counter %d\n", loop_counter[0]);
+            if (total[0] > 85) //don't increase the counter to clear te display if only 85 lines have changed 
+            loop_counter[0]++;
         }
         if (disable_logging == 0)
             printf("Processing time %dms\n", getTick() - t0);
@@ -263,27 +324,43 @@ static int mirroring_task()
 
 int main(int argc, char *argv[])
 {
-    int8_t nb_args = sizeof(&argv);
-    int16_t *esp32_settings = (int16_t *)calloc(nb_args - 5, sizeof(uint8_t));
+    int8_t nb_args = argc;
     int8_t settings_size[1];
-    settings_size[0] = sizeof(esp32_settings);
+    settings_size[0] = (nb_args - 7)*2;
+    int16_t *esp32_settings = (int16_t *)calloc(settings_size[0], sizeof(uint8_t));
+
     //  printf("settings size %d \n", settings_size[0]);
+
     char *esp32_ip_address = argv[1];
     char *display_id = argv[2];
+    id = std::stoi(argv[2]);
     width_resolution = std::stoi(argv[3]);
     height_resolution = std::stoi(argv[4]);
-    esp32_settings[0] = std::stoi(argv[5]);
-    esp32_settings[1] = std::stoi(argv[6]);
-    esp32_settings[2] = std::stoi(argv[7]);
-    esp32_settings[3] = std::stoi(argv[8]);
-    disable_logging = std::stoi(argv[9]);
+    refresh_every_x_frames = std::stoi(argv[5]);
+
+    esp32_settings[0] = std::stoi(argv[6]);
+    esp32_settings[1] = std::stoi(argv[7]);
+    esp32_settings[2] = std::stoi(argv[8]);
+    esp32_settings[3] = std::stoi(argv[9]);
+    esp32_settings[4] = std::stoi(argv[10]);
+    esp32_settings[5] = std::stoi(argv[11]);
+    esp32_settings[6] = std::stoi(argv[12]);
+
+    disable_logging = std::stoi(argv[settings_size[0]-1]);
 
     printf("esp32_ip_address: %s\n", esp32_ip_address);
     printf("display id: %s\n", display_id);
+    printf("refresh_every_x_frames: %d\n", refresh_every_x_frames);
+
     printf("framebuffer_cycles: %d\n", esp32_settings[0]);
     printf("rmt_high_time: %d\n", esp32_settings[1]);
-    printf("skipping_threshold: %d\n", esp32_settings[2]);
-    printf("nb_chunks: %d\n", esp32_settings[3]);
+    printf("enable_skipping: %d\n", esp32_settings[2]);
+    printf("epd_skip_threshold: %d\n", esp32_settings[3]);
+    printf("framebuffer_cycles_2: %d\n", esp32_settings[4]);
+    printf("framebuffer_cycles_2_threshold: %d\n", esp32_settings[5]);
+    printf("nb_chunks: %d\n", esp32_settings[6]);
+
+
     if (disable_logging == 1)
         printf("logging disabled \n");
 
@@ -331,6 +408,6 @@ int main(int argc, char *argv[])
         puts("Connected to esp wifi\n");
     }
     send(socket_desc, settings_size, 1, 0);
-    send(socket_desc, esp32_settings, sizeof(esp32_settings), 0);
+    send(socket_desc, esp32_settings, settings_size[0], 0);
     mirroring_task(); //Start the mirroring process
 }

@@ -25,13 +25,14 @@ The Python module mss is used to capture the screen and Pillow is used to conver
 
 
 #### Notes on development:
-- Framerate and draw time depend on settings, on how much screen has changed and speed of wifi,  with default settings full frame draw time including the wifi transfer can be between 100ms to 160ms (10 fps to 6.25 fps). This will be improved in the future.
+- Framerate and draw time depend on settings, on how much screen has changed and speed of wifi,  with default settings full frame draw time including the wifi transfer can be between 60ms to 160ms.
 - Ghosting can be a problem in particular when drawing white letters on black background. Is recommended to use black letters on white background.
 - It is necessary to have at least 1 real monitor plugged in to a port of the pc, and the application will mirror an area of that monitor, a dummy hdmi plug could be used to bypass this limitation.
+- Because the mss module does not capture the mouse cursor, it is added manually
 
 ------------
 #### Dependencies:
-This project requires a Epdiy controller board, to get one is necessary to order a pcb and solder the components. For more info go: https://github.com/vroland/epdiy
+This project requires a Epdiy controller board, to get one is necessary to order a pcb from a pcb manufacturers and solder the components. Some pcb manufacturers also offer to solder them. For more info go: https://github.com/vroland/epdiy
 
 Required Python modules:
 ```bash
@@ -71,7 +72,7 @@ Note it down.
 
 7) Add the ip address to a display configuration file: 
 
-Open *example_display.conf* in  *~/epdiy/examples/pc_monitor/pc_host_app/* with a text editor and change the IP address in the first line to the one you noted down before
+Open *example_display.conf* in  *~/epdiy/examples/pc_monitor/pc_host_app/* with a text editor and change the IP address in the first line to the one you noted down before, and, if needed, change the values *width* and *height* to the witdh and height resolution of your display
 
 
 8) Build the pc-host application:
@@ -85,9 +86,11 @@ g++  main.cpp generate_eink_framebuffer.cpp rle_compression.cpp utils.cpp -o pro
 To start the mirroring execute:
 ```bash
 python3 screen_capture.py example_display.conf
-
 ```
-
+If you want to hide the terminal output run it like this:
+```bash
+python3 screen_capture.py example_display.conf -silent
+```
 Important: always exit the pc host application by pressing the letter **q**
 
 
@@ -97,29 +100,38 @@ The pc host application reads the settings from a *.conf* file passed as an argu
 
 - *ip_address* : the IP address of the ESP32 module to connect to
 
+- *id*: Number to identify each display. Has to be different for each display
+
 - *width* : the resolution width of the display
 
 - *height*: the resolution height of the display
 
 - *x_offset* and *y_offset*      
-They set how many pixels away for the top left corner the screen will be captured. ie. if the resolution is 1200x825, setting both to zero will capture 1200x825 pixels from the extreme top left corner of the screen. setting them to 100 and 50 will capture 1200x825 pixels 100 pixels to the right and 50 pixels from the top left corner of the screen
+They set how many pixels away for the top left corner the screen will be captured. ie. if the resolution is 1200x825, setting both to zero will capture 1200x825 pixels from the extreme top left corner of the screen. setting them to 100 and 50 will capture 1200x825 pixels 100 pixels to the right and 50 pixels from the top left corner of the screen. If you have 2 monitors of 1920x1080 pixels and you want to capture from the top left corner of the monitor on the right, *x_offset* should be 1920 and *y_offset* should be 0. More info on mss: https://python-mss.readthedocs.io/examples.html
 
 - *rotation*: can be set to 180 to if using a display upside down
 
 - *grey_monochrome_threshold*:
 When converting the capture from 256 greyscale shades to black and white monochrome a threshold is used to determine which shades will become plain black and which plain white. The default is 200 and it improves drawing black letters on white background.
 
-- *sleep_time*: amount of time in miliseconds to pause the program after capturing a frame.
- 
-- *id*: Number to identidy each display. Has to be different for each display
+- *sleep_time*: Amount of time in miliseconds to pause the program after capturing a frame. Can be used to reduce the framerate artificially. Set it to 50 or less for fast refresh rate
+
+- *refresh_every_x_frames*: Refreshes the display every the specified number of frame draws. A frame draw is not counted if less than 85 lines have changed (such as when moving the mouse)
 
 - *framebuffer_cycles*: Defines the number of times to write the current eink framebuffer to the display.  Because of the way that eink displays work, writing the same framebuffer to the display has the effect of getting deeper blacks and whites. Increases draw time.
 
-- *rmt_high_time*: Defines the high tick time of the CKV signal. A higher value makes blacks blacker and whites whiter. Increases draw time.
+- *rmt_high_time*: Defines the high tick time of the CKV signal. A higher value makes blacks blacker and whites whiter. Increases draw time. It is defined in *rmt_pulse.h*
+
+Advanced settings:
+- *enable_skipping*: makes the driver call *epd_skip()* instead of *epd_output_row()* with an empty buffer. It can reduce draw time significantly but may introduce some artifacts. To avoid the artifacts but mantain low draw time when moving the cursor *epd_skip_threshold* can be set to 75.
+
+- *epd_skip_threshold*: if less than *epd_skip_threshold* rows have changed skipping is enabled for the current frame draw. 
+
+- *framebuffer_cycles_2* and *framebuffer_cycles_2_threshold*: If less than *framebuffer_cycles_2_threshold* number of rows have changed, the current framebuffer will be written *framebuffer_cycles_2* times instead of the value set by *framebuffer_cycles*. Can be used to reduce the draw time when just a few lines have changed such as when moving the cursor.
 
 #### Using multiple displays at the same time
 
-In the last version support for using multiple displays at the same time was added. For each display it is required to create a configuration file. 
+The application supports using multiple displays at the same time. For each display it is required to create a configuration file. 
 Once the configuration files are created run them as
 
 ```bash
@@ -133,12 +145,11 @@ python3 screen_capture.py display2.conf
 ```
 Each from a different terminal
 
-
 ------------
 #### Support for other displays
 
 - The project has been tested using a board revision 4 and a ED097TC2 display. Check for the list of other  displays supported by the Epdiy board on https://github.com/vroland/epdiy . Those displays should work but are untested. If the display you want to try has the same resolution of the ED097TC2, that is 1200x825, it should be enough to select the correct display type in the menuconfig Epdiy section.
-If the display you want to try has a different resolution, other than selecting it in the menuconfig, you should also specify its resolution in its display configuration file.
+If the display you want to try has a different resolution, other than selecting it in the menuconfig before flashing the board, you should also specify its resolution on its display configuration file.
  ------------
 
 
@@ -146,5 +157,6 @@ If the display you want to try has a different resolution, other than selecting 
 - Organize the code better
 - Improve ghosting
 - Optimize data transfer between pc and board
+
 
 
