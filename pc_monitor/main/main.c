@@ -322,7 +322,9 @@ static void download_and_extract(const int sock)
       if (a == nb_chunks)
         printf("\n");
 #endif
+      printf(" %d ", chunk_lenghts_int[a]);
     }
+    printf("\n");
     long time1 = xTaskGetTickCount();
     recv(sock, line_changed, height_resolution + 2, 0);
     int total = 0;
@@ -571,10 +573,10 @@ CLEAN_UP:
   ESP_LOGI(TAG, "Restarting the board in 2 seconds..");
   close(listen_sock);
   vTaskDelay(2000 / portTICK_PERIOD_MS);
-  // esp_restart();
-  vTaskDelete(NULL);
-  wifi_task(NULL);
-  xTaskCreatePinnedToCore(&tcp_server_task, "tcp_server_task", 10000, NULL, 5, NULL, 1);
+  esp_restart();
+  //vTaskDelete(NULL);
+  //wifi_task(NULL);
+ // xTaskCreatePinnedToCore(&tcp_server_task, "tcp_server_task", 10000, NULL, 5, NULL, 1);
 }
 
 void init_memory(int extra_bytes)
