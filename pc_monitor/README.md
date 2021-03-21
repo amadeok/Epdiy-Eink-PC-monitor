@@ -1,6 +1,5 @@
 
 
-
 # Epdiy Eink Pc Monitor 
 (work in progress)
 #### Description:
@@ -122,7 +121,13 @@ When converting the capture from 256 greyscale shades to black and white monochr
 
 - *rmt_high_time*: Defines the high tick time of the CKV signal. A higher value makes blacks blacker and whites whiter. Increases draw time. It is defined in *rmt_pulse.h*
 
+- - *pseudo_greyscale_mode* enables the pseudo greyscale mode which is monochrome with dithering (experimental). it is possible to switch from monochrome to this mode while the mirroring is running by pressing 'm' on terminal
+
+
+
 Advanced settings:
+- *selective_compression* sets a maximum percentage of eficiency for the rle compression. if that percentage is not met, the framebuffer will be sent without compression to the board  
+
 - *enable_skipping*: makes the driver call *epd_skip()* instead of *epd_output_row()* with an empty buffer. It can reduce draw time significantly but may introduce some artifacts. To avoid the artifacts but mantain low draw time when moving the cursor *epd_skip_threshold* can be set to 75.
 
 - *epd_skip_threshold*: if less than *epd_skip_threshold* rows have changed skipping is enabled for the current frame draw. 
@@ -157,6 +162,7 @@ If the display you want to try has a different resolution, other than selecting 
 - Organize the code better
 - Improve ghosting
 - Optimize data transfer between pc and board
+
 
 
 

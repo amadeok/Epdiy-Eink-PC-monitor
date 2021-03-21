@@ -9,6 +9,7 @@ import io
 from random import randint
 import numpy as np
 import threading
+from draw_cursor import generate_cursor, draw_cursor, draw_cursor_1bpp
 from multiprocessing import shared_memory, resource_tracker
 
 
@@ -34,7 +35,8 @@ dif_list_sum = 0
 switcher = 0
 pad_bytes = 0
 exiting = 0
-pos2 = pyautogui.position()
+pipe_settings = bytearray(b'\x00\x00\x00')
+
 
 input_file = ""
 tty.setcbreak(sys.stdin)
@@ -122,9 +124,16 @@ def pipe_output_f(raw_files, mouse_moved):
             shm_a.close()
         sys.exit(f'Python capture ID {display_id} terminated')
     elif mouse_moved:
-        os.write(fd0, b'\xf6\x01')
+        pipe_settings[1] = 1
     else:        
-        os.write(fd0, b'\xf6\x00')
+        pipe_settings[1] = 1
+
+    if pseudo_greyscale_mode == 1:
+        pipe_settings[2] = 1
+    else: 
+        pipe_settings[2] = 0
+
+    os.write(fd0, pipe_settings)
 
 
 
@@ -135,115 +144,15 @@ def pipe_output_f(raw_files, mouse_moved):
     return byte_frag
 
 
-def generate_cursor():
-    wp = b'\xff\xff\xff\xff'
-    bp = b'\x00\x00\x00\xff'
-    current_line = []
-    current_line_bytes = []
-    global byte_array_cursor
-    byte_array_cursor = []
-    cursor = [[bp]]
-    for y in range(12):
-        current_line.append(bp)
-        current_line.append(bp)
-
-        current_line_bytes = bp
-        current_line_bytes += bp
-
-        for l in range(y-2):
-            current_line.append(wp)
-            current_line_bytes += wp
-        current_line.append(bp)
-        current_line.append(bp)
-
-        current_line_bytes += bp
-        current_line_bytes += bp
-
-        cursor.append(current_line[:])
-        current_line.clear()
-
-    current_line = [bp, bp, wp, wp, wp, wp, wp, bp, bp, bp, bp, bp, bp]
-    cursor.append(current_line[:])
-    current_line.clear()
-    current_line = [bp, bp, wp, wp, bp, wp, bp, bp]
-    cursor.append(current_line[:])
-    current_line.clear()
-    current_line = [bp, bp, wp, bp, wp, bp, wp, bp, bp]
-    cursor.append(current_line[:])
-    current_line.clear()
-    current_line = [bp, bp, bp, wp, wp, bp, wp, bp, bp]
-    cursor.append(current_line[:])
-    current_line.clear()
-    current_line = [bp, bp, wp, wp, wp, wp, bp, wp, bp, bp]
-    cursor.append(current_line[:])
-    current_line.clear()
-    current_line = [bp, wp, wp, bp]  # 6 spaces before , list number 18
-    cursor.append(current_line[:])
-    current_line.clear()
-    current_line = [bp, bp]  # 7 spaces before, list number 19
-    cursor.append(current_line[:])
-    current_line.clear()
-    for k in range(20):
-        current_line2 = b"".join(cursor[k])
-        byte_array_cursor.append(current_line2[:])
-
-
-def draw_cursor():
-    #t0 = time.time()
-    global x_offset
-    global y_offset
-    global width_res2
-    global height_res2
-    global pos2
-    previous_pos = pos2
-    pos2 = pyautogui.position()
-    if pos2.x >= x_offset and pos2.x <= width_res2 and pos2.y >= y_offset and pos2.y <= height_res2:
-        x_cursor = pos2.x - x_offset
-        y_cursor = pos2.y - y_offset
-        linear_coor = (y_cursor*width_res*4) + x_cursor*4
-        for h in range(15):
-            sct_img.raw[linear_coor+(h*width_res*4):linear_coor+(
-                h*width_res*4)+len(byte_array_cursor[h])] = byte_array_cursor[h]
-        # print(sct_img.raw[linear_coor+(h*width_res*4):linear_coor+(h*width_res*4)+len(byte_array_cursor[h])])
-        h += 1
-        sct_img.raw[linear_coor+(h*width_res*4):linear_coor +
-                    (h*width_res*4)+16] = byte_array_cursor[h][0:16]
-        offset = 16 + 4
-        sct_img.raw[linear_coor+(h*width_res*4)+offset:linear_coor +
-                    (h*width_res*4)+offset+16] = byte_array_cursor[h][20:36]
-        h += 1
-        offset = 12 + 8
-        sct_img.raw[linear_coor+(h*width_res*4):linear_coor +
-                    (h*width_res*4)+3*4] = byte_array_cursor[h][0:3*4]
-        sct_img.raw[linear_coor+(h*width_res*4)+offset:linear_coor +
-                    (h*width_res*4)+offset+16] = byte_array_cursor[h][20:36]
-        h += 1
-        offset = 8+16
-        sct_img.raw[linear_coor+(h*width_res*4):linear_coor +
-                    (h*width_res*4)+2*4] = byte_array_cursor[h][0:2*4]
-        sct_img.raw[linear_coor+(h*width_res*4)+offset:linear_coor +
-                    (h*width_res*4)+offset+16] = byte_array_cursor[h][24:40]
-        # h+=1
-        sct_img.raw[linear_coor+(h*width_res*4)+offset:linear_coor +
-                    (h*width_res*4)+offset+16] = byte_array_cursor[18]
-        offset += 4
-        h += 1
-        sct_img.raw[linear_coor+(h*width_res*4)+offset:linear_coor +
-                    (h*width_res*4)+offset+8] = byte_array_cursor[19]
-        # print("inside")
-        if previous_pos.x != pos2.x and previous_pos.y != pos2.y:
-            return 1
-        else:
-            return 0
 def check_key_presses(PID_list):
     x = 0
     orig_settings = termios.tcgetattr(sys.stdin)
-    global exiting
+    global exiting; global pseudo_greyscale_mode
     
     while 1 and exiting == 0:  # ESC
         x = sys.stdin.read(1)[0]
-        if x == 'q':
-            print("exiting")
+        if x == 'q' or x == 'Q':
+            print("Exiting")
             if has_childs == 1:
                 shared_buffer[0] = 101
             exiting = 101
@@ -255,8 +164,14 @@ def check_key_presses(PID_list):
                 os.kill(PID_list[0], 9)
             except:
                 pass
-
-        print("You pressed", x)
+        elif x == 'm' or x == 'M':
+            if pseudo_greyscale_mode == 1:
+                pseudo_greyscale_mode = 0
+                print("Pseudo greyscale mode is off")
+            elif pseudo_greyscale_mode ==  0:
+                pseudo_greyscale_mode = 1
+                print("Pseudo greyscale mode is on")
+        else: print("No keybind for", x)
 
     termios.tcsetattr(sys.stdin, termios.TCSADRAIN, orig_settings)
 
@@ -278,9 +193,14 @@ class display_settings:
         self.epd_skip_threshold =  int(settings_list[13][1])
         self.framebuffer_cycles_2 =  int(settings_list[14][1])
         self.framebuffer_cycles_2_threshold =  int(settings_list[15][1])
-        self.nb_chunks =  int(settings_list[16][1])
+        self.pseudo_greyscale_mode = int(settings_list[16][1])
+        self.selective_compression = int(settings_list[17][1])
+        self.nb_chunks =  int(settings_list[18][1])
 
         self.disable_logging = settings_list[len(settings_list)-1]
+
+        self.width_res2 = self.width + self.x_offset
+        self.height_res2 = self.height + self.y_offset
 
 # display_index = 0
 display_list = []
@@ -347,8 +267,7 @@ with mss.mss() as sct:
     global line_with_pad
     pad_bytes = get_nb_bytes_pad()
     line_with_pad = int((width_res / 8) + pad_bytes)
-    width_res2 = width_res + x_offset
-    height_res2 = height_res + y_offset
+
     tot_nb_pixels = height_res * width_res
     chunk_size = int(width_res*height_res/8/8)
     monitor = {"top": y_offset, "left": x_offset,
@@ -376,7 +295,7 @@ with mss.mss() as sct:
     pipe_bit_depth = 1
     pipe_output = 1
     enable_raw_output = 1
-    mode = 2
+    pseudo_greyscale_mode = display_list[0].pseudo_greyscale_mode
     save_bmp = 0
     check_for_difference_esp = 1
     ###################
@@ -410,6 +329,9 @@ with mss.mss() as sct:
               f'{display_list[x].epd_skip_threshold}',
               f'{display_list[x].framebuffer_cycles_2}',
               f'{display_list[x].framebuffer_cycles_2_threshold}',
+              f'{display_list[x].pseudo_greyscale_mode}',
+            f'{display_list[x].selective_compression}',
+
               f'{display_list[x].nb_chunks}', 
               f'{display_list[x].disable_logging}'])
             time.sleep(0.5)
@@ -450,8 +372,8 @@ with mss.mss() as sct:
 
 
     global sct_image
-    complete_output_file = f'{working_dir}/image_mode_{mode}.bmp'
-    raw_output_file = f"{working_dir}/image_mode_{mode}raw"
+    complete_output_file = f'{working_dir}/image_mode_.bmp'
+    raw_output_file = f"{working_dir}/image_mode_raw"
     while 1:
         t0 = time.time()
         if switcher == 0:
@@ -464,7 +386,7 @@ with mss.mss() as sct:
 
         sct_img = sct.grab(monitor) #capture screen
 
-        mouse_moved = draw_cursor()
+        #mouse_moved = draw_cursor(display_list[0], sct_img)
         image_file = Image.frombytes(
             "RGB", sct_img.size, sct_img.bgra, "raw", "RGBX")
 
@@ -472,14 +394,17 @@ with mss.mss() as sct:
             image_file = Image.open(f"{working_dir}{input_file}") # for testing
 
 
-        if mode == 1:
+        if pseudo_greyscale_mode == 1:
             # convert image to black and white
-            image_file = image_file.convert('1')
-            if rotation != 0:
-                image_file   = image_file.rotate(90,  expand=True)
             image_file = image_file.transpose(Image.FLIP_TOP_BOTTOM)
+            image_file = image_file.convert('L')
 
-        elif mode == 2:
+            image_file = image_file.convert('1')
+
+            if rotation != 0:
+                image_file   = image_file.rotate(rotation,  expand=True)
+
+        else:
 
             def fn(x): return 255 if x > grey_to_monochrome_threshold else 0
 
@@ -502,6 +427,9 @@ with mss.mss() as sct:
             image_file.save(complete_output_file)
         if pipe_output:  # and dif_list_sum
             if pipe_bit_depth == 1:
+                ori_r = raw_files[0][:]
+                mouse_moved = draw_cursor_1bpp(display_list[0], raw_files[0])
+
                 byte_frag = pipe_output_f(raw_files[0], mouse_moved)  # 1bpp->raw_files[0]
             elif pipe_bit_depth == 8:
                 byte_frag = pipe_output_f(np_image_file, mouse_moved)  # 1bpp->raw_files[0]

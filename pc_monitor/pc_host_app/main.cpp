@@ -35,6 +35,7 @@ int socket_desc;
 int compressed_chunk_lengths[16];
 
 int enable_wifi = 1;
+unsigned char *ready2;
 
 unsigned char *decompressed;          // for testing or debugging
 unsigned char *decompressed_received; // for testing or debugging
@@ -43,29 +44,50 @@ unsigned char *received;              // for testing or debugging
 unsigned char *tmp_array;
 
 unsigned char *compressed_eink_framebuffer_ptrs[16]; //array of pointers pointing to chunks of framebuffer
-int id, refresh_every_x_frames = 0;
-int total_nb_pixels, eink_framebuffer_size, chunk_size, nb_chunks = 1;
+int id, refresh_every_x_frames = 0, selective_compression;
+int total_nb_pixels, eink_framebuffer_size, chunk_size, nb_chunks;
 int source_image_bit_depth = 1;
 bool disable_logging;
 uint32_t loop_counter[1] = {0};
 int mouse_moved = 0;
+int pseudo_greyscale_mode = 0;
 
 uint8_t ready0[6];
 uint8_t ready1[6];
+uint8_t per_frame_wifi_settings[6] = {0, 0, 0, 0, 0, 0};
+
 char input_pipe[200];
 char output_pipe[200];
 int fd0, fd1;
 
-void wifi_transfer(unsigned char compressed_eink_framebuffer[], int compressed_framebuffer_size)
+void wifi_transfer(unsigned char *eink_framebuffer_swapped, int eink_framebuffer_size)
 {
+    unsigned char *framebuffer_to_send[16];
+    int framebuffer_to_send_size;
 
     int ret = 0, buf_size = 4096, tot = 0, tot2 = 0, len = 0;
+
     if (mouse_moved == 1)
-        send(socket_desc, "moved1", 6, 0);
+        per_frame_wifi_settings[0] = 'm';
     else
+        per_frame_wifi_settings[0] = 0;
+
+    if (pseudo_greyscale_mode == 1)
+        per_frame_wifi_settings[1] = 'p';
+    else
+        per_frame_wifi_settings[1] = 0;
+
+    send(socket_desc, per_frame_wifi_settings, 6, 0);
+    int ret0 = recv(socket_desc, ready2, 6, 0);
+    for (int k = 0; k < 6; k++)
     {
-        send(socket_desc, "ready1", 6, 0);
+        if (ready2[k] != per_frame_wifi_settings[k])
+        {
+            printf("warning ready2 per_frame_wifi_settings dif \n");
+            sleep(100000);
+        }
     }
+
     if (loop_counter[0] == refresh_every_x_frames + 1)
         loop_counter[0] = 0;
 
@@ -75,28 +97,44 @@ void wifi_transfer(unsigned char compressed_eink_framebuffer[], int compressed_f
 
     //   array_to_file(eink_framebuffer_swapped, eink_framebuffer_size, working_dir, "eink_framebuffer_swapped", 0);
     unsigned char ready[5];
-    int g;
+    int g, a = 0;
+    for (int h = 0; h < nb_chunks; h++)
+    {
+        if (compressed_chunk_lengths[h] > chunk_size / 100 * selective_compression)
+            a++;
+    }
+    //  if (a == nb_chunks)
+    //     printf("a = nb_chunms\n");
     for (g = 0; g < nb_chunks; g++)
     {
+        if (compressed_chunk_lengths[g] > chunk_size / 100 * selective_compression && selective_compression != 0)
+        {
+            framebuffer_to_send[g] = eink_framebuffer_swapped + (chunk_size * g);
+            framebuffer_to_send_size = chunk_size;
+        }
+        else
+        {
+            framebuffer_to_send[g] = compressed_eink_framebuffer_ptrs[g];
+            framebuffer_to_send_size = compressed_chunk_lengths[g];
+        }
         buf_size = 4096 * 5;
         int len2;
         tot = 0;
         ret = 0;
         int converted_number = 0;
-        int compressed_chunk_size = compressed_chunk_lengths[g];
-        if (compressed_chunk_size < buf_size)
-            buf_size = compressed_chunk_size;
+        if (framebuffer_to_send_size < buf_size)
+            buf_size = framebuffer_to_send_size;
         do
         {
-            ret = send(socket_desc, compressed_eink_framebuffer_ptrs[g] + tot, buf_size, 0);
+            ret = send(socket_desc, framebuffer_to_send[g] + tot, buf_size, 0);
             tot += ret;
             if (ret == -1)
                 printf("error transfer wifi returneed -1\n");
-            if (compressed_chunk_size - tot < buf_size + 5000)
-                buf_size = compressed_chunk_size - tot;
-        } while (tot < compressed_chunk_size);
-
-        if (tot != compressed_chunk_size)
+            if (framebuffer_to_send_size - tot < buf_size + 5000)
+                buf_size = framebuffer_to_send_size - tot;
+        } while (tot < framebuffer_to_send_size);
+        //     printf("tot %d\n", tot);
+        if (tot != framebuffer_to_send_size)
         {
             printf("warning tot != compress size\n");
         }
@@ -157,7 +195,7 @@ static int mirroring_task()
     chunk_size = (eink_framebuffer_size / nb_chunks);
 
     unsigned char ack[1] = {246};
-    unsigned char ack2[2];
+    unsigned char ack2[3];
     unsigned char ready0[6];
     unsigned char ready1[6];
 
@@ -186,7 +224,8 @@ static int mirroring_task()
     line_changed = (unsigned char *)calloc(height_resolution + 2, sizeof(unsigned char));
     source_1bpp = (unsigned char *)calloc(total_nb_pixels, sizeof(unsigned char));
     tmp_array = (unsigned char *)calloc(eink_framebuffer_size + 50000, sizeof(unsigned char));
-
+    ready2 = (unsigned char *)calloc(6, sizeof(unsigned char));
+    memset(ready2, 0, 6);
     padded_2bpp_framebuffer_current = (unsigned char *)calloc(eink_framebuffer_size, sizeof(unsigned char));
     padded_2bpp_framebuffer_previous = (unsigned char *)calloc(eink_framebuffer_size, sizeof(unsigned char));
 
@@ -220,14 +259,14 @@ static int mirroring_task()
         printf("unsupported bit depth\n");
         return -1;
     }
-    int total[] = {0}, repeat_counter = 0, next = 0;
+    int total[] = {1}, repeat_counter = 0, next = 0;
     ;
     while (1)
     {
         if (total[0] != 0 && enable_wifi == 1) // if screen didn't change don't wait for ack from board
             recv(socket_desc, ready0, 6, 0);
         write(fd1, ack, 1);
-        read(fd0, ack2, 2);
+        read(fd0, ack2, 3);
         if (ack2[0] == 101)
         {
             printf("C++ app ID %d exiting \n", id);
@@ -238,6 +277,10 @@ static int mirroring_task()
             mouse_moved = 1;
         else
             mouse_moved = 0;
+        if (ack2[2] == 1)
+            pseudo_greyscale_mode = 1;
+        else
+            pseudo_greyscale_mode = 0;
 
         long t0 = getTick();
         read(fd0, line_changed, height_resolution);
@@ -292,7 +335,7 @@ static int mirroring_task()
         }
         // rle_extract1(decompressed, nb_chunks, eink_framebuffer_swapped, eink_framebuffer_size, compressed_chunk_lengths[0]); //for testing
 
-        //  print_chunk_sizes();
+       // print_chunk_sizes();
 
         total[0] = 0;
         uint16_t total2[1];
@@ -313,7 +356,7 @@ static int mirroring_task()
 
         if (total[0] != 0 && enable_wifi == 1 && FT245MODE == 0) //send framebuffer only if current capture is different than previous
         {
-            wifi_transfer(compressed_eink_framebuffer, compressed_framebuffer_size);
+            wifi_transfer(eink_framebuffer_swapped, eink_framebuffer_size);
             repeat_counter = 0;
             // printf("loop_counter %d\n", loop_counter[0]);
             if (total[0] > 85) //don't increase the counter to clear te display if only 85 lines have changed
@@ -349,8 +392,10 @@ int main(int argc, char *argv[])
     esp32_settings[4] = std::stoi(argv[10]);
     esp32_settings[5] = std::stoi(argv[11]);
     esp32_settings[6] = std::stoi(argv[12]);
+    esp32_settings[7] = std::stoi(argv[13]);
+    esp32_settings[8] = std::stoi(argv[14]);
 
-    disable_logging = std::stoi(argv[settings_size[0] - 1]);
+    disable_logging = std::stoi(argv[nb_args - 1]);
 
     printf("esp32_ip_address: %s\n", esp32_ip_address);
     printf("display id: %s\n", display_id);
@@ -362,7 +407,10 @@ int main(int argc, char *argv[])
     printf("epd_skip_threshold: %d\n", esp32_settings[3]);
     printf("framebuffer_cycles_2: %d\n", esp32_settings[4]);
     printf("framebuffer_cycles_2_threshold: %d\n", esp32_settings[5]);
-    printf("nb_chunks: %d\n", esp32_settings[6]);
+    printf("pseudo_greyscale_mode: %d\n", esp32_settings[6]);
+    printf("selective_compression: %d\n", selective_compression = esp32_settings[7]);
+
+    printf("nb_chunks: %d\n", nb_chunks = esp32_settings[8]);
 
     if (disable_logging == 1)
         printf("logging disabled \n");
@@ -409,8 +457,9 @@ int main(int argc, char *argv[])
             return 1;
         }
         puts("Connected to esp wifi\n");
+        send(socket_desc, settings_size, 1, 0);
+        send(socket_desc, esp32_settings, settings_size[0], 0);
     }
-    send(socket_desc, settings_size, 1, 0);
-    send(socket_desc, esp32_settings, settings_size[0], 0);
+
     mirroring_task(); //Start the mirroring process
 }

@@ -58,18 +58,22 @@ uint8_t *line_changed;
 int16_t total_lines_changed[1] = {0};
 int16_t prev_total_lines_changed = 0;
 volatile uint8_t mouse_moved = 0;
+uint8_t *where_to_download;
+int download_size;
 
 uint16_t *settings;
 //bool already_got_settings = false;
 
 int width_resolution = EPD_WIDTH, height_resolution = EPD_HEIGHT;
 
-int total_nb_pixels, eink_framebuffer_size, chunk_size, nb_chunks = 1, nb_rows_per_chunk;
+int total_nb_pixels, eink_framebuffer_size, chunk_size, nb_chunks = 5, nb_rows_per_chunk;
 
 int framebuffer_cycles; // sets the number of times to write the current framebuffer to the screen
 int rmt_high_time;      // defined in rmt_pulse.h, a higher value makes blacks blacker and whites whiter
 int framebuffer_cycles_2, framebuffer_cycles_2_threshold;
 int enable_skipping, epd_skip_threshold;
+int pseudo_greyscale_mode;
+int selective_compression;
 
 uint8_t *chunk_lenghts;
 int32_t *chunk_lenghts_int;
@@ -257,6 +261,32 @@ void print_values(int tot) // for debugging
   printf("\n");
 }
 
+int set_download_pointer(int chunk_number)
+{
+
+  int need_to_extract;
+  if (chunk_lenghts_int[chunk_number] > chunk_size / 100 * selective_compression && selective_compression != 0)
+  {
+    where_to_download = get_current_chunk_ptr(chunk_number);
+    download_size = chunk_size;
+#if DEBUG_MSGs == 1
+    printf("receving uncompressed framebuffer %d\n", chunk_lenghts_int[chunk_number]);
+#endif
+    need_to_extract = 0;
+  }
+  else
+  {
+    where_to_download = compressed_chunk;
+    download_size = chunk_lenghts_int[chunk_number];
+#if DEBUG_MSGs == 1
+    printf("receving compressed framebuffer %d\n", download_size);
+#endif
+    need_to_extract = 1;
+  }
+  return need_to_extract;
+  //  printf("where_to_download %p, download_size %d\n", where_to_download, download_size);
+}
+
 static void download_and_extract(const int sock)
 {
   mirroring_active = true;
@@ -269,12 +299,16 @@ static void download_and_extract(const int sock)
     send(sock, "ready0", 6, 0);
 
     recv(sock, ready1, 6, 0);
+    send(sock, ready1, 6, 0);
 
     if (ready1[0] == 'm')
       mouse_moved = 1;
     else
       mouse_moved = 0;
-    
+    if (ready1[1] == 'p')
+      pseudo_greyscale_mode = 1;
+    else
+      pseudo_greyscale_mode = 0;
 
     recv(sock, chunk_lenghts, nb_chunks * 4, 0);
 
@@ -283,10 +317,12 @@ static void download_and_extract(const int sock)
       memcpy(chunk_lenghts_int + (a * 1), chunk_lenghts + a * 4, 4 * sizeof(uint8_t));
       // chunk_lenghts_int[a] = chunk_lenghts[(a * 2)] | chunk_lenghts[(a * 2) + 1] << 8;
       // printf(" %d %d ", chunk_lenghts[(a*2)], chunk_lenghts[(a*2)+1]);
-      //  printf(" %d ", chunk_lenghts_int[a]);
+#if DEBUG_MSGs == 1
+      printf(" %d ", chunk_lenghts_int[a]);
+      if (a == nb_chunks)
+        printf("\n");
+#endif
     }
-    // printf("\n");
-
     long time1 = xTaskGetTickCount();
     recv(sock, line_changed, height_resolution + 2, 0);
     int total = 0;
@@ -299,24 +335,28 @@ static void download_and_extract(const int sock)
     memcpy(total_lines_changed, line_changed + height_resolution, 2);
     // printf("line changed %d, prev_total_lines_changed %d, 3rd %d \n", total_lines_changed[0], prev_total_lines_changed, prev_total_lines_changed_2); //, xTaskGetTickCount() - time2 );
 
-    compressed_size = chunk_lenghts_int[0];
+    uint8_t need_to_extract = set_download_pointer(0);
+
+    //  compressed_size = chunk_lenghts_int[0];
     // printf("cs0 %d \n", compressed_size);
-    if (compressed_size < buf_size)
-      buf_size = compressed_size;
+    if (download_size < buf_size)
+      buf_size = download_size;
     do
     {
-      len = recv(sock, compressed_chunk + tot, buf_size, 0);
-      //   printf("len %d, tot %d\n", len, tot);
+      len = recv(sock, where_to_download + tot, buf_size, 0);
+#if DEBUG_MSGs == 1
+      printf("len %d, tot %d\n", len, tot);
+#endif
       // print_values(tot);
       tot += len;
       if (len < 0)
         break;
 
-      if (compressed_size - tot < 4096 * 6)
+      if (download_size - tot < 4096 * 6)
       {
-        buf_size = compressed_size - tot;
+        buf_size = download_size - tot;
       }
-    } while (tot < compressed_size);
+    } while (tot < download_size);
     if (len < 0)
     {
       printf("Powering off Epdiy board \n ");
@@ -324,19 +364,22 @@ static void download_and_extract(const int sock)
       epd_poweroff();
       break;
     }
-    // delta = xTaskGetTickCount() - time1;
-    //  printf("down took : %d ", delta);
-    // printf("tot %d \n", tot);
-//   long time2 = xTaskGetTickCount();
+#if DEBUG_MSGs == 1
+    printf("tot %d \n", tot);
+#endif
+
 #if MULTITASK == 0
-    rle_extract1(compressed_size, get_current_chunk_ptr(0), compressed_chunk);
+    if (need_to_extract == 1)
+      rle_extract1(download_size, get_current_chunk_ptr(0), where_to_download);
 #else
     printf("current_buffer %d \n", current_buffer);
-
-    if (current_buffer == 0)
-      rle_extract1(compressed_size, get_current_chunk_ptr(0), compressed_chunk);
-    else if (current_buffer == 1)
-      rle_extract1(compressed_size, second_framebuffer, compressed_chunk);
+    if (chunk_lenghts_int[0] < chunk_size / 10 * 3)
+    {
+      if (need_to_extract == 1)
+        rle_extract1(download_size, get_current_chunk_ptr(0), where_to_download);
+      else if (current_buffer == 1)
+        rle_extract1(download_size, second_framebuffer, where_to_download);
+    }
 
 #endif
     //   delta = xTaskGetTickCount() - time2;
@@ -350,28 +393,33 @@ static void download_and_extract(const int sock)
       tot = 0;
       len = 0;
       buf_size = 4096 * 5;
+      need_to_extract = set_download_pointer(h + 1);
 
-      compressed_size = chunk_lenghts_int[h + 1];
+      // compressed_size = chunk_lenghts_int[h + 1];
       //   printf("cs%d %d \n", h + 1, compressed_size);
 
-      if (compressed_size < buf_size)
-        buf_size = compressed_size;
+      if (download_size < buf_size)
+        buf_size = download_size;
 
       do
       {
-        len = recv(sock, compressed_chunk + tot, buf_size, 0);
-        //  printf("len %d, tot %d\n", len, tot);
+        len = recv(sock, where_to_download + tot, buf_size, 0);
+#if DEBUG_MSGs == 1
+        printf("len %d, tot %d\n", len, tot);
+#endif
         //   print_values(tot);
         tot += len;
         if (len < 0)
           break;
 
-        if (compressed_size - tot < 4096 * 6)
+        if (download_size - tot < 4096 * 6)
         {
-          buf_size = compressed_size - tot;
+          buf_size = download_size - tot;
         }
-      } while (tot < compressed_size);
-      //       printf("tot %d \n", tot);
+      } while (tot < download_size);
+#if DEBUG_MSGs == 1
+      printf("tot %d \n", tot);
+#endif
       if (len < 0)
       {
         mirroring_active = false;
@@ -379,7 +427,8 @@ static void download_and_extract(const int sock)
         epd_poweroff();
         break;
       }
-      rle_extract1(compressed_size, get_current_chunk_ptr(h + 1), compressed_chunk);
+      if (need_to_extract == 1)
+        rle_extract1(download_size, get_current_chunk_ptr(h + 1), where_to_download);
 
       downloader_chunk_counter++;
       //    printf("down cc %d \n", downloader_chunk_counter);
@@ -411,7 +460,8 @@ void receive_settings(const int sock)
   printf("epd_skip_threshold %d \n", epd_skip_threshold = settings[3]);
   printf("framebuffer_cycles_2 %d \n", framebuffer_cycles_2 = settings[4]);
   printf("framebuffer_cycles_2_threshold %d \n", framebuffer_cycles_2_threshold = settings[5]);
-
+  printf("pseudo_greyscale_mode %d \n", pseudo_greyscale_mode = settings[6]);
+  printf("selective_compression %d \n", selective_compression = settings[7]);
   printf("################# \n");
   // already_got_settings = true;
 }
@@ -527,28 +577,28 @@ CLEAN_UP:
   xTaskCreatePinnedToCore(&tcp_server_task, "tcp_server_task", 10000, NULL, 5, NULL, 1);
 }
 
-void init_memory()
+void init_memory(int extra_bytes)
 {
   if (nb_chunks > 0)
-    fc0 = (uint8_t *)heap_caps_malloc((chunk_size + 10000) * sizeof(uint8_t), MALLOC_CAP_SPIRAM);
+    fc0 = (uint8_t *)heap_caps_malloc((chunk_size + extra_bytes) * sizeof(uint8_t), MALLOC_CAP_SPIRAM);
   if (nb_chunks > 1)
-    fc1 = (uint8_t *)heap_caps_malloc((chunk_size + 10000) * sizeof(uint8_t), MALLOC_CAP_SPIRAM);
+    fc1 = (uint8_t *)heap_caps_malloc((chunk_size + extra_bytes) * sizeof(uint8_t), MALLOC_CAP_SPIRAM);
   if (nb_chunks > 2)
-    fc2 = (uint8_t *)heap_caps_malloc((chunk_size + 10000) * sizeof(uint8_t), MALLOC_CAP_SPIRAM);
+    fc2 = (uint8_t *)heap_caps_malloc((chunk_size + extra_bytes) * sizeof(uint8_t), MALLOC_CAP_SPIRAM);
   if (nb_chunks > 3)
-    fc3 = (uint8_t *)heap_caps_malloc((chunk_size + 10000) * sizeof(uint8_t), MALLOC_CAP_SPIRAM);
+    fc3 = (uint8_t *)heap_caps_malloc((chunk_size + extra_bytes) * sizeof(uint8_t), MALLOC_CAP_SPIRAM);
   if (nb_chunks > 4)
-    fc4 = (uint8_t *)heap_caps_malloc((chunk_size + 10000) * sizeof(uint8_t), MALLOC_CAP_SPIRAM);
+    fc4 = (uint8_t *)heap_caps_malloc((chunk_size + extra_bytes) * sizeof(uint8_t), MALLOC_CAP_SPIRAM);
   if (nb_chunks > 5)
-    fc5 = (uint8_t *)heap_caps_malloc((chunk_size + 10000) * sizeof(uint8_t), MALLOC_CAP_SPIRAM);
+    fc5 = (uint8_t *)heap_caps_malloc((chunk_size + extra_bytes) * sizeof(uint8_t), MALLOC_CAP_SPIRAM);
   if (nb_chunks > 6)
-    fc6 = (uint8_t *)heap_caps_malloc((chunk_size + 10000) * sizeof(uint8_t), MALLOC_CAP_SPIRAM);
+    fc6 = (uint8_t *)heap_caps_malloc((chunk_size + extra_bytes) * sizeof(uint8_t), MALLOC_CAP_SPIRAM);
   if (nb_chunks > 7)
-    fc7 = (uint8_t *)heap_caps_malloc((chunk_size + 10000) * sizeof(uint8_t), MALLOC_CAP_SPIRAM);
+    fc7 = (uint8_t *)heap_caps_malloc((chunk_size + extra_bytes) * sizeof(uint8_t), MALLOC_CAP_SPIRAM);
   if (nb_chunks > 8)
-    fc8 = (uint8_t *)heap_caps_malloc((chunk_size + 10000) * sizeof(uint8_t), MALLOC_CAP_SPIRAM);
+    fc8 = (uint8_t *)heap_caps_malloc((chunk_size + extra_bytes) * sizeof(uint8_t), MALLOC_CAP_SPIRAM);
   if (nb_chunks > 9)
-    fc9 = (uint8_t *)heap_caps_malloc((chunk_size + 10000) * sizeof(uint8_t), MALLOC_CAP_SPIRAM);
+    fc9 = (uint8_t *)heap_caps_malloc((chunk_size + extra_bytes) * sizeof(uint8_t), MALLOC_CAP_SPIRAM);
 }
 void app_main()
 {
@@ -596,6 +646,7 @@ void app_main()
   eink_framebuffer_size = total_nb_pixels / 4;
   chunk_size = (eink_framebuffer_size / nb_chunks);
   nb_rows_per_chunk = height_resolution / nb_chunks;
+  int extra_bytes = 200000 / nb_chunks;
   if (nb_chunks == 2)
     nb_rows_per_chunk = 412;
   //  int free_mem = esp_get_free_heap_size();
@@ -607,7 +658,7 @@ void app_main()
   line_changed = (uint8_t *)heap_caps_malloc(height_resolution + 2, MALLOC_CAP_SPIRAM);
 
   // framebuffer_chunks = (uint8_t **)calloc(nb_chunks, sizeof(uint8_t));
-  init_memory();
+  init_memory(extra_bytes);
   for (int g = 0; g < nb_chunks; g++)
   {
     // framebuffer_chunks[g] = (uint8_t *)heap_caps_malloc(chunk_size + 10000, MALLOC_CAP_SPIRAM);
@@ -636,7 +687,7 @@ void app_main()
   else
     ESP_LOGI(TAG, "Heap is corrupted");
 
-  ESP_LOGI(TAG, "nb_chunks %d, nb_rows_chunks %d, chunk_size %d, eink_framebuffer_size %d", nb_chunks, nb_rows_per_chunk, chunk_size, eink_framebuffer_size);
+  ESP_LOGI(TAG, "nb_chunks %d, nb_rows_chunks %d, chunk_size %d, eink_framebuffer_size %d, chunk_size+extra_bytes %d", nb_chunks, nb_rows_per_chunk, chunk_size, eink_framebuffer_size, chunk_size + extra_bytes);
 #if MULTITASK == 1
   multitask = 1;
   xTaskCreatePinnedToCore(&pc_monitor_feed_display_multithreaded_v1_one_chunk, "feed_display_task", 10000, NULL, 5, NULL, 0);
