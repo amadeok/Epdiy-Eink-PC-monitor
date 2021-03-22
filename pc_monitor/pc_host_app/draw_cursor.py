@@ -98,13 +98,12 @@ def draw_cursor_1bpp(conf, byte_string_raw):
     global pos2
     previous_pos = pos2
     pos2 = pyautogui.position()
-    offset = 0
     if pos2.x >= x_offset and pos2.x <= width_res2 and pos2.y >= y_offset and pos2.y <= height_res2-22:
         t0 = time.time()
-        x = int((pos2.x - offset) / 8)
-        y = int((pos2.y - offset +1))
+        x = int((pos2.x - x_offset) / 8)
+        y = int((pos2.y - y_offset +1))
 
-
+        #print(f"x {x}, pos2.x  {pos2.x }")
 
         if conf.rotation == 180:
             x = width_res-x
@@ -117,10 +116,10 @@ def draw_cursor_1bpp(conf, byte_string_raw):
             xrem = pos2.x % 8
             y+=16
 
-        yrem = (pos2.y - offset) % 8
+        yrem = (pos2.y - y_offset) % 8
         
         line_coor = (y*width_res//8) + x #+ 62
-
+        #print(f"inv x {x}, line_coor {line_coor}")
         if conf.rotation ==  0:
             for j in range(16):
                 oribyte = int.from_bytes(byte_string_raw[line_coor+(j*-width_res//8):line_coor+4+(j*-width_res//8)], 'big')
