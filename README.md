@@ -185,4 +185,3 @@ If the display you want to try has a different resolution, other than selecting 
 
 
 
-
