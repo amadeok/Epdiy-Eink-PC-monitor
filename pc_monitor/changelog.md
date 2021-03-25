@@ -1,5 +1,7 @@
 # Changelog
 
+## [0.04] - 25-03-2021
+-Added option to apply Pillow color, contrast, brightness and sharpness enhancements to the image before it is converted to 1bpp
 
 ## [0.03] - 21-03-2021
 

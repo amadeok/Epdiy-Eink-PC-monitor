@@ -1,12 +1,14 @@
 #include <2bitLUTforC_inv.h>
 #include <string.h>
+#include <utils.h>
 
 extern int total_nb_pixels, refres_every_x_frames;
-
+extern char working_dir[256];
+;
 int loop_counter0 = 1, loop_counter1 = 0;
 
 void *generate_eink_framebuffer_v1(unsigned char *source_1bpp, unsigned char *padded_2bpp_framebuffer_current, unsigned char *padded_2bpp_framebuffer_previous, unsigned char *eink_framebuffer)
-{   //generate eink framebuffer from 1bpp monochrome capture
+{ //generate eink framebuffer from 1bpp monochrome capture
     int counter = 0;
 
     // long t = getTick();
@@ -22,7 +24,7 @@ void *generate_eink_framebuffer_v1(unsigned char *source_1bpp, unsigned char *pa
 }
 
 void generate_eink_framebuffer_v2(unsigned char *source_8bpp_current, unsigned char *source_8bpp_previous, unsigned char *source_8bpp_modified_previous, unsigned char *eink_framebuffer)
-{   //generate eink framebuffer from 8bpp monochrome capture, slower than v1
+{ //generate eink framebuffer from 8bpp monochrome capture, slower than v1
     memset(eink_framebuffer, 0, total_nb_pixels / 4);
     unsigned char temp_mask = 0;
     int dif_counter = 0, delta_counter = 0, delta_nb;
@@ -47,9 +49,46 @@ void generate_eink_framebuffer_v2(unsigned char *source_8bpp_current, unsigned c
     //     array_to_file(eink_framebuffer, 230400, working_dir, "eink_framebuffer", 0);
 }
 
+void generate_filter_framebuffer(unsigned char *source_8bpp_current, unsigned char *source_8bpp_previous, unsigned char *filter_framebuffer)
+{
+
+    array_to_file(source_8bpp_current, total_nb_pixels / 4, working_dir, "source_8bpp_current", 0);
+
+   array_to_file(source_8bpp_previous, total_nb_pixels / 4, working_dir, "source_8bpp_previous", 0);
+
+    memset(filter_framebuffer, 0, total_nb_pixels / 4);
+    unsigned char temp_mask = 0;
+    int delta_counter = 0;
+    for (int counter = 0; counter < total_nb_pixels; counter += 4)
+    {
+        temp_mask = 0;
+
+        for (int y = 0; y < 4; y++)
+        {
+            if (source_8bpp_current[counter + y] > source_8bpp_previous[counter + y])
+            {
+                temp_mask |= 2 << y * 2; // make pixel whiter // 128 >> y * 2 when not inverted
+            }
+            else if (source_8bpp_current[counter + y] < source_8bpp_previous[counter + y])
+            {
+                temp_mask |= 1 << y * 2; // make pixel blacker // 64 >> y * 2 when not inverted
+            }
+        }
+        filter_framebuffer[delta_counter] |= temp_mask;
+        delta_counter++;
+    }
+}
+
+void filter_unwanted_dither(unsigned char *eink_framebuffer, unsigned char *filter_framebuffer, unsigned char *eink_framebuffer_modified, int eink_framebuffer_size)
+{
+    for (int h = 0; h < eink_framebuffer_size; h++)
+    {
+        eink_framebuffer_modified[h] = eink_framebuffer[h] & filter_framebuffer[h];
+    }
+}
 
 void generate_eink_framebuffer_v2_with_ghost(unsigned char *source_8bpp_current, unsigned char *source_8bpp_previous, unsigned char *source_8bpp_modified_previous, unsigned char *eink_framebuffer, int nb_pixels_to_change)
-{   // generate eink framebuffer and attempt to reduce ghosting (experimental)
+{ // generate eink framebuffer and attempt to reduce ghosting (experimental)
     memset(eink_framebuffer, 0, total_nb_pixels / 4);
     unsigned char temp_mask = 0;
     int dif_counter = 0, delta_counter = 1, delta_nb;

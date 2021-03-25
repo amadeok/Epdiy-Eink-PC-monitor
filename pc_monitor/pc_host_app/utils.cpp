@@ -48,7 +48,7 @@ void file_to_array(char array[], int array_size, int file_size, const char *path
 }
 
 void swap_bytes(unsigned char *eink_framebuffer, unsigned char *eink_framebuffer_swapped, int eink_framebuffer_size, int source_image_bit_depth)
-{   //swapping bytes is necessary to get them in the order that the board needs
+{ //swapping bytes is necessary to get them in the order that the board needs
     //   long t = getTick();
 
     for (int h = 0; h < eink_framebuffer_size; h += 4)
@@ -61,6 +61,16 @@ void swap_bytes(unsigned char *eink_framebuffer, unsigned char *eink_framebuffer
     }
 
     //  printf("swapping took: %d\n", getTick() - t);
+}
+
+void improve_dither_compression(unsigned char *eink_framebuffer, int eink_framebuffer_size, unsigned char *line_changed, int width, int height)
+{
+    int line_size = width / 4;
+    for (int h = 0; h < height; h++)
+    {
+        if (line_changed[h] == 0)
+            memset(eink_framebuffer+h*line_size, 0, line_size);
+    }
 }
 
 int extract_and_compare(unsigned char *eink_framebuffer_swapped, int g)

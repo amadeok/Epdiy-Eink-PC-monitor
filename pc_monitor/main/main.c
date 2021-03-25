@@ -26,7 +26,8 @@
 #include "nvs_flash.h"
 #include "pc_monitor.h"
 #include "epd_driver.h"
-#include "ed097oc4.h"
+#include "display_ops.h"
+
 
 #define WIFI_SSID "wifi_ssid"
 #define WIFI_PASS "wifi_password"
@@ -322,9 +323,9 @@ static void download_and_extract(const int sock)
       if (a == nb_chunks)
         printf("\n");
 #endif
-      printf(" %d ", chunk_lenghts_int[a]);
+  //    printf(" %d ", chunk_lenghts_int[a]);
     }
-    printf("\n");
+ //   printf("\n");
     long time1 = xTaskGetTickCount();
     recv(sock, line_changed, height_resolution + 2, 0);
     int total = 0;

@@ -1,65 +1,7 @@
 import pyautogui, time, io
 from PIL import Image
-#from bitstring import BitStream, BitArray
 
-
-
-
-name = "cursor_test_image.bmp"
-ext = ".bmp"
-input_file = f"{name}{ext}"
-list_xy = []
-path = "/home/amadeok/epdiy-working/examples/pc_monitor/pc_host_app/"
-string = ""
-remove_eol = 0
-new_byte_string = b''
-header_path = "header1200x825" # header936x704 , 936x88header
-t0 = time.time()
 pos2 = pyautogui.position() 
-print(time.time()-t0)
-
-class position():
-    x = 0
-    y = 0
-pos = position()
-
-width_res = 1200
-height_res = 825
-
-with open(f"{path}{header_path}.bmp", "rb") as h:
-    header = h.read()
-#with open(f"{path}{name}", "rb") as file:
-#    byte_string_raw = bytearray(file.read())
-
-def get_nb_bytes_pad():
-    global width_res
-    tmp_width = width_res
-    for x in range(4):
-        rem = tmp_width % 32
-        tmp_width += 8
-        if rem == 0:
-            return x
-
-global line_with_pad
-pad_bytes = get_nb_bytes_pad()
-line_with_pad = int((width_res / 8) + pad_bytes)
-
-image_file = Image.open(f"{path}{name}") # for testing
-image_file = image_file.convert('1')
-
-output = io.BytesIO()
-image_file.save(output, format='BMP')
-byte_string_raw = output.getvalue()
-byte_string_raw = bytearray(byte_string_raw)
-
-end = len(byte_string_raw)
-start = end - pad_bytes
-
-for x in range(height_res):
-    byte_string_raw[start:end] = b''
-    start -= line_with_pad  
-    end -= line_with_pad
-#byte_string_raw[0:62] = b''
 
 def process_string(current_byte_string):
     inverted_output0= ''

@@ -11,5 +11,9 @@ void file_to_array(char array[], int array_size, int file_size, const char *path
 //Swaps the bytes in the framebuffer to get them in the order that the board needs
 void swap_bytes(unsigned char *eink_framebuffer, unsigned char *eink_framebuffer_swapped, int eink_framebuffer_size, int source_image_bit_depth);
 
+// if a line didn't actually change in the original 8bpp capture, set the corresponding line to 0s 
+// so that the dithering doesn't spoil the rest of the image
+void improve_dither_compression(unsigned char *eink_framebuffer, int eink_framebuffer_size, unsigned char *line_changed, int width, int height);
+
 //Compare a framebuffer received from the board to the one sent (for debugging)
 int extract_and_compare(unsigned char *eink_framebuffer_swapped, int g);

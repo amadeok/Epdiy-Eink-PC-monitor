@@ -1,16 +1,18 @@
 import mss
 import os, sys
 import pyautogui
-from PIL import Image
+from PIL import Image, ImageEnhance
+
+
 import time
 import subprocess
 import termios, tty
-import io
+import io, struct
 from random import randint
 import numpy as np
 import threading
 from draw_cursor import generate_cursor, draw_cursor, draw_cursor_1bpp
-from multiprocessing import shared_memory, resource_tracker
+from multiprocessing import shared_memory, resource_tracker, Value
 
 
 width_res = 0
@@ -36,10 +38,13 @@ switcher = 0
 pad_bytes = 0
 exiting = 0
 pipe_settings = bytearray(b'\x00\x00\x00')
-
+print_settings = 0
 
 input_file = ""
 tty.setcbreak(sys.stdin)
+
+display_list = []
+display_conf = []
 
 def create_pipes(output_pipe, input_pipe):
     try:
@@ -50,7 +55,6 @@ def create_pipes(output_pipe, input_pipe):
         os.mkfifo(input_pipe)
     except OSError as oe:
         pass
-
 
 def get_nb_bytes_pad():
     global width_res
@@ -76,8 +80,8 @@ def get_raw_pixels(image_file, file_path, save_raw_file, switcher):
         end -= line_with_pad
     byte_string_list[switcher][0:62] = b''
     
-    if check_for_difference_esp:
-        check_for_difference_esp_fun(byte_string_list)
+    if check_for_difference_esp:# and pseudo_greyscale_mode == 0:
+        check_for_difference_esp_fun(byte_string_list, 1)
     byte_frag = byte_string_list[switcher]
 
     if save_raw_file:
@@ -88,23 +92,44 @@ def get_raw_pixels(image_file, file_path, save_raw_file, switcher):
 
     return [byte_string_list[switcher], byte_string_raw, byte_string_list]
 
-def check_for_difference_esp_fun(array_list):
-    chunk_size = width_res//8
+
+def check_for_difference_esp_fun(array_list, bit_depth):
+    if bit_depth == 8:
+        divider = 1
+    elif bit_depth == 1: divider = 8
+    
+    chunk_size = width_res//divider
     startt = 0
     endd = chunk_size
+
     global dif_list_sum
     dif_list_sum = 0
+    #t0 = time.time()
+
     for t in range(height_res):
-        if array_list[0][startt:endd] != array_list[1][startt:endd]:
-            dif_list[t] = 1
-            dif_list_sum += 1
-            #print(f"row {t} is different")
-        else:
-            dif_list[t] = 0
+        if bit_depth == 8:
+            arr = array_list[0][t]
+            arr2 = array_list[1][t]
+            ret = np.array_equal(arr, arr2)
+            if ret == False:
+                dif_list[t] = 1
+                dif_list_sum += 1
+                #print(f"row {t} is different")
+            else:
+                dif_list[t] = 0
+                #print(f"not different")
+        elif bit_depth == 1:
+            if array_list[0][startt:endd] != array_list[1][startt:endd]:
+                dif_list[t] = 1
+                dif_list_sum += 1
+                #print(f"row {t} is different")
+            else:
+                dif_list[t] = 0
         startt += chunk_size
         endd += chunk_size
+    #print("check dif took", time.time() - t0)
 
-def pipe_output_f(raw_files, mouse_moved):
+def pipe_output_f(raw_files, np_image_file, mouse_moved):
     byte_frag = raw_files
     if child_process ==  0:
         end_val = exiting
@@ -135,20 +160,35 @@ def pipe_output_f(raw_files, mouse_moved):
 
     os.write(fd0, pipe_settings)
 
-
-
     if check_for_difference_esp == 1:
         os.write(fd0, dif_list)
     os.write(fd0, byte_frag)
+    # if display_list[0].improve_dither:
+    #     ready = os.read(fd1, 1)
+    #     os.write(fd0, pipe_settings)
+    #     os.write(fd0, np_image_file)
+
     #print(f"data sent")
     return byte_frag
 
+def write_to_shared_mem(obj, increase, type):
+    obj.value += increase
+    if type == 'f':
+        shared_buffer[obj.pos:obj.pos+4] = float_to_bytearray(obj.value)    
+    elif type == 'i':
+        shared_buffer[obj.pos:obj.pos+4] = obj.value.to_bytes(4,  byteorder = 'big', signed=True)
 
-def check_key_presses(PID_list):
+def get_val_from_shm(obj, type):
+    if type == 'f':
+        return round((bytearray_to_float(shared_buffer[obj.pos:obj.pos+4]))[0], 1)
+    elif type == 'i':
+        return int.from_bytes(shared_buffer[obj.pos:obj.pos+4], byteorder='big', signed=True)
+
+
+def check_key_presses(PID_list, conf):
     x = 0
     orig_settings = termios.tcgetattr(sys.stdin)
-    global exiting; global pseudo_greyscale_mode
-    
+    global exiting; global print_settings
     while 1 and exiting == 0:  # ESC
         x = sys.stdin.read(1)[0]
         if x == 'q' or x == 'Q':
@@ -165,13 +205,49 @@ def check_key_presses(PID_list):
             except:
                 pass
         elif x == 'm' or x == 'M':
-            if pseudo_greyscale_mode == 1:
-                pseudo_greyscale_mode = 0
-                print("Pseudo greyscale mode is off")
-            elif pseudo_greyscale_mode ==  0:
-                pseudo_greyscale_mode = 1
-                print("Pseudo greyscale mode is on")
+            if get_val_from_shm(conf.pseudo_greyscale_mode, 'i') == 1:
+                write_to_shared_mem(conf.pseudo_greyscale_mode, -1, 'i')
+                print("Pseudo greyscale mode is off ", get_val_from_shm(conf.pseudo_greyscale_mode, 'i'))
+            else:
+                write_to_shared_mem(conf.pseudo_greyscale_mode, +1, 'i')
+                print("Pseudo greyscale mode is on ", get_val_from_shm(conf.pseudo_greyscale_mode, 'i'))
+        elif x == '1':
+            write_to_shared_mem(conf.color, -0.1, 'f')
+        elif x == '2':
+            write_to_shared_mem(conf.color, +0.1, 'f')
+        elif x == '3':
+            write_to_shared_mem(conf.contrast, -0.1, 'f')
+        elif x == '4':
+            write_to_shared_mem(conf.contrast, +0.1, 'f')
+        elif x == '5':
+            write_to_shared_mem(conf.brightness, -0.1, 'f')
+        elif x == '6':
+            write_to_shared_mem(conf.brightness, +0.1, 'f')
+        elif x == '7':
+            write_to_shared_mem(conf.sharpness, -0.1, 'f')
+        elif x == '8':
+            write_to_shared_mem(conf.sharpness, +0.1, 'f')
+        elif x == '9':
+            write_to_shared_mem(conf.grey_to_monochrome_threshold, -10, 'i')
+        elif x == '0':
+            write_to_shared_mem(conf.grey_to_monochrome_threshold, +10, 'i')
+        elif x == 'b' or x == 'B':
+            if get_val_from_shm(conf.enhance_before_greyscale, 'i') == 1:
+                write_to_shared_mem(conf.enhance_before_greyscale, -1, 'i')
+                print("enhance_before_greyscale is off ", get_val_from_shm(conf.enhance_before_greyscale, 'i'))
+            else:
+                write_to_shared_mem(conf.enhance_before_greyscale, +1, 'i')
+                print("enhance_before_greyscale is on ", get_val_from_shm(conf.enhance_before_greyscale, 'i'))
+        
         else: print("No keybind for", x)
+        
+        try: 
+            n = int(x); 
+            if n >= 0 and n <= 9:
+                print_settings = 1
+                #print(f"color {get_val_from_shm(conf.color, 'f')}, contrast  {get_val_from_shm(conf.contrast, 'f')}  brightness {get_val_from_shm(conf.brightness, 'f')}, sharpness {get_val_from_shm(conf.sharpness, 'f')},  grey_to_monochrome_threshold {get_val_from_shm(conf.grey_to_monochrome_threshold, 'i')}")
+        except: pass
+        
 
     termios.tcsetattr(sys.stdin, termios.TCSADRAIN, orig_settings)
 
@@ -184,7 +260,8 @@ class display_settings:
         self.x_offset = int(settings_list[4][1])
         self.y_offset = int(settings_list[5][1])
         self.rotation = int(settings_list[6][1])
-        self.grey_to_monochrome_threshold =  int(settings_list[7][1]) 
+        self.grey_to_monochrome_threshold = int(settings_list[7][1])
+
         self.sleep_time= int(settings_list[8][1]) 
         self.refresh_every_x_frames = int(settings_list[9][1])
         self.framebuffer_cycles = int(settings_list[10][1])
@@ -193,18 +270,45 @@ class display_settings:
         self.epd_skip_threshold =  int(settings_list[13][1])
         self.framebuffer_cycles_2 =  int(settings_list[14][1])
         self.framebuffer_cycles_2_threshold =  int(settings_list[15][1])
-        self.pseudo_greyscale_mode = int(settings_list[16][1])
-        self.selective_compression = int(settings_list[17][1])
-        self.nb_chunks =  int(settings_list[18][1])
+        self.pseudo_greyscale_mode =  int(settings_list[16][1])
+        self.color =  float(settings_list[17][1])
+        self.contrast =  float(settings_list[18][1])
+        self.brightness =   float(settings_list[19][1])
+        self.sharpness =  float(settings_list[20][1])
+        self.enhance_before_greyscale =   int(settings_list[21][1])
 
+        self.selective_compression = int(settings_list[22][1])
+        self.nb_chunks =  int(settings_list[23][1])
         self.disable_logging = settings_list[len(settings_list)-1]
 
         self.width_res2 = self.width + self.x_offset
         self.height_res2 = self.height + self.y_offset
+        self.conf_type = 'read_from_file'
 
-# display_index = 0
-display_list = []
-display_conf = []
+
+def float_to_bytearray(float):
+    return bytearray(struct.pack("f", float))
+def bytearray_to_float(bytearr):
+    return struct.unpack('f', bytearr)   
+
+class offset_object:
+    def __init__(self, byte_position, value):
+        self.pos = byte_position
+        self.value = value
+    def round(self):
+        self.value = round(self.value, 1)
+class shared_var:
+    def __init__(self):
+        self.pseudo_greyscale_mode = offset_object(10, 0)
+        self.color =  offset_object(14, 0)
+        self.contrast =  offset_object(18, 0)
+        self.brightness =  offset_object(22, 0)
+        self.sharpness =  offset_object(26, 0)
+        self.enhance_before_greyscale = offset_object(30, 0)
+        self.grey_to_monochrome_threshold =   offset_object(34, 0)
+
+
+
 def generate_display_class(display_conf):
     display_list.append(display_settings(display_conf))
 
@@ -221,12 +325,56 @@ def get_display_settings(conf_file, disable_logging):
     generate_display_class(display_conf)
     
 
+
+def apply_enhancements(image_file, conf, offsets):
+    #t0 = time.time()
+    global print_settings
+    val0 = get_val_from_shm(offsets.color, 'f')
+    if conf.color + val0 != 1.0:
+        enhancer = ImageEnhance.Color(image_file)
+        image_file = enhancer.enhance(conf.color + val0)     
+
+    val1 = get_val_from_shm(offsets.contrast, 'f')
+    if conf.contrast + val1  != 1.0:
+        enhancer = ImageEnhance.Contrast(image_file)
+        image_file = enhancer.enhance(conf.contrast + val1)
+
+    val2 = get_val_from_shm(offsets.brightness, 'f')
+    if conf.brightness + val2 != 1.0:
+        enhancer = ImageEnhance.Brightness(image_file)
+        image_file = enhancer.enhance(conf.brightness + val2)
+
+    val3 = get_val_from_shm(offsets.sharpness, 'f')
+    if conf.sharpness + val3 != 1.0:
+        enhancer = ImageEnhance.Sharpness(image_file)
+        image_file = enhancer.enhance(conf.sharpness + val3)
+    
+    if print_settings and child_process == 0:
+        print(f"color {conf.color + val0}, contrast  {conf.contrast + val1}  brightness {conf.brightness + val2}, sharpness {conf.sharpness + val3},  grey_to_monochrome_threshold {conf.grey_to_monochrome_threshold + get_val_from_shm(offsets.grey_to_monochrome_threshold, 'i')}")
+        print_settings = 0
+
+    #print("enhance took", time.time() - t0 )
+
+    return image_file
+
+
+def convert_to_greyscale_and_enhance(image_file, conf, offset_variables):
+    if get_val_from_shm(offset_variables.enhance_before_greyscale, 'i'):
+        image_file = apply_enhancements(image_file, conf, offset_variables)
+
+    image_file = image_file.convert('L')
+
+    if get_val_from_shm(offset_variables.enhance_before_greyscale, 'i')  == 0:
+        image_file = apply_enhancements(image_file, conf, offset_variables)
+    return image_file
+
+child_process = 0
 with mss.mss() as sct:
     args = str(sys.argv)
     
     disable_logging = 0
-    child_process = 0
     has_childs = 0
+    disable_wifi = 0
     try:
         ret = sys.argv.remove("-silent")
         disable_logging = 1
@@ -235,16 +383,15 @@ with mss.mss() as sct:
         ret = sys.argv.remove("child")
         child_process = 1
     except: pass
+    try:
+        ret = sys.argv.remove("-disable_wifi")
+        disable_wifi = 1
+    except: pass
     nb_arg = len(sys.argv)
     nb_displays = nb_arg -1
 
-    # for x in range(nb_arg-1):
-    #     if sys.argv[x] == "-silent":
-    #         disable_logging = 1
-    #         ret = sys.argv.remove("-silent")
-    #     if sys.argv[x] == "child":
-    #         child_process = 1
-    #         ret = sys.argv.remove("child")
+
+
     for x in range(nb_displays):
         get_display_settings(sys.argv[x+1], disable_logging)
     
@@ -254,7 +401,6 @@ with mss.mss() as sct:
     x_offset = display_list[0].x_offset                      
     y_offset = display_list[0].y_offset
     rotation =  display_list[0].rotation
-    grey_to_monochrome_threshold =  display_list[0].grey_to_monochrome_threshold
     sleep_time = display_list[0].sleep_time
     display_id = display_list[0].display_id
     framebuffer_cycles = display_list[0].framebuffer_cycles
@@ -308,39 +454,53 @@ with mss.mss() as sct:
     pid0 = os.getpid()
     PID_list.append(pid0)
 
-    # global shared_buffer
-    try: shm_a = shared_memory.SharedMemory(create=True, size=10, name='screen_capture_shm')
+    global shared_buffer
+    try: shm_a = shared_memory.SharedMemory(create=True, size=100, name='screen_capture_shm')
     except: shm_a = shared_memory.SharedMemory(name='screen_capture_shm')
     shared_buffer = shm_a.buf
 
-    if pipe_output and start_process and child_process == 0:
-        shared_buffer[:10] = bytearray([0, 0, 0, 0, 0, 0, 0, 0, 0, 0]) 
-        buffer2 = bytearray(shared_buffer)
-        for x in range(nb_displays):  
-            R = subprocess.Popen([f'{working_dir}/process_capture', 
-             f'{display_list[x].ip_address}',
-              f'{display_list[x].display_id}',
-              f'{display_list[x].width}',
-              f'{display_list[x].height}',
-              f'{display_list[x].refresh_every_x_frames}',
-              f'{display_list[x].framebuffer_cycles}', 
-              f'{display_list[x].rmt_high_time}',
-              f'{display_list[x].enable_skipping}',
-              f'{display_list[x].epd_skip_threshold}',
-              f'{display_list[x].framebuffer_cycles_2}',
-              f'{display_list[x].framebuffer_cycles_2_threshold}',
-              f'{display_list[x].pseudo_greyscale_mode}',
-            f'{display_list[x].selective_compression}',
+    ba = float_to_bytearray(1.23)
 
-              f'{display_list[x].nb_chunks}', 
-              f'{display_list[x].disable_logging}'])
-            time.sleep(0.5)
-            has_childs = 1
+    global offset_variables
+    offset_variables = shared_var()
 
-            PID_list.append(R.pid)
+    if disable_wifi:
+        wifi_on = 0
+    else: wifi_on = 1
+    if child_process == 0:
 
-    else:   
-        pid1 = None
+        if pipe_output and start_process:
+            shared_buffer[0:100] = bytearray(100)
+            shared_buffer[10:14] = ba
+            ba2 = bytearray_to_float(shared_buffer[14:18])
+            buffer2 = bytearray(shared_buffer)
+            for x in range(nb_displays):  
+                R = subprocess.Popen([f'{working_dir}/process_capture', 
+                f'{display_list[x].ip_address}',
+                f'{display_list[x].display_id}',
+                f'{display_list[x].width}',
+                f'{display_list[x].height}',
+                f'{display_list[x].refresh_every_x_frames}',
+                f'{display_list[x].framebuffer_cycles}', 
+                f'{display_list[x].rmt_high_time}',
+                f'{display_list[x].enable_skipping}',
+                f'{display_list[x].epd_skip_threshold}',
+                f'{display_list[x].framebuffer_cycles_2}',
+                f'{display_list[x].framebuffer_cycles_2_threshold}',
+                f'{display_list[x].pseudo_greyscale_mode}',
+                f'{display_list[x].selective_compression}',
+
+                f'{display_list[x].nb_chunks}', 
+
+                f'{display_list[x].disable_logging}',
+                f'{wifi_on}'])
+
+                time.sleep(0.5)
+                has_childs = 1
+
+                PID_list.append(R.pid)
+        else:   
+            pid1 = None
 
 
     nb_arg = len(sys.argv)
@@ -352,9 +512,12 @@ with mss.mss() as sct:
         PID_list.append(P.pid)
         time.sleep(0.5)
 
-        
+    
+
+    conf = display_list[0]
+
     if child_process == 0:
-        thread1 = threading.Thread(target=check_key_presses, args=(PID_list,))
+        thread1 = threading.Thread(target=check_key_presses, args=(PID_list, offset_variables))
         thread1.start()
     #for x in range 
 
@@ -374,6 +537,7 @@ with mss.mss() as sct:
     global sct_image
     complete_output_file = f'{working_dir}/image_mode_.bmp'
     raw_output_file = f"{working_dir}/image_mode_raw"
+
     while 1:
         t0 = time.time()
         if switcher == 0:
@@ -392,29 +556,32 @@ with mss.mss() as sct:
 
         if open_from_disk == 1:
             image_file = Image.open(f"{working_dir}{input_file}") # for testing
+        
+        if get_val_from_shm(offset_variables.pseudo_greyscale_mode, 'i') == 1:
+            
+            if rotation != 0:
+                image_file   = image_file.rotate(rotation,  expand=True)
+            
+            image_file = convert_to_greyscale_and_enhance(image_file, conf, offset_variables)
 
-
-        if pseudo_greyscale_mode == 1:
-            # convert image to black and white
+                
             image_file = image_file.transpose(Image.FLIP_TOP_BOTTOM)
-            image_file = image_file.convert('L')
+
 
             image_file = image_file.convert('1')
 
-            if rotation != 0:
-                image_file   = image_file.rotate(rotation,  expand=True)
 
         else:
 
-            def fn(x): return 255 if x > grey_to_monochrome_threshold else 0
-
-            image_file = image_file.convert('L')
+            image_file = convert_to_greyscale_and_enhance(image_file, conf, offset_variables)
+            th = conf.grey_to_monochrome_threshold+get_val_from_shm(offset_variables.grey_to_monochrome_threshold, 'i')
+            def fn(x): return 255 if x > th else 0
 
             image_file = image_file.point(fn, mode='1')
 
-            np_image_file = np.asarray(image_file, dtype=np.uint8)
+            #np_image_file = np.asarray(image_file, dtype=np.uint8)
 
-            eight_bpp_bytearr_list[switcher] = np_image_file
+            #eight_bpp_bytearr_list[switcher] = np_image_file
 
             image_file = image_file.transpose(Image.FLIP_TOP_BOTTOM) #flip the image so that the first bytes contain the pixel data of the first lines
             if rotation != 0:
@@ -427,12 +594,11 @@ with mss.mss() as sct:
             image_file.save(complete_output_file)
         if pipe_output:  # and dif_list_sum
             if pipe_bit_depth == 1:
-                ori_r = raw_files[0][:]
                 mouse_moved = draw_cursor_1bpp(display_list[0], raw_files[0])
 
-                byte_frag = pipe_output_f(raw_files[0], mouse_moved)  # 1bpp->raw_files[0]
+                byte_frag = pipe_output_f(raw_files[0], np_image_file, mouse_moved)  # 1bpp->raw_files[0]
             elif pipe_bit_depth == 8:
-                byte_frag = pipe_output_f(np_image_file, mouse_moved)  # 1bpp->raw_files[0]
+                byte_frag = pipe_output_f(np_image_file, np_image_file, mouse_moved)  # 1bpp->raw_files[0]
         if disable_logging == 0:
             print(f"Display ID: {display_id}, capture took {int(((time.time() - t0)*1000))}ms")
         time.sleep(sleep_time/1000)
