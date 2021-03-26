@@ -210,7 +210,7 @@ static int mirroring_task()
 
     unsigned char *eink_framebuffer; // the 2bpp array that will be fed directly to the display
 
-    unsigned char *filter_framebuffer; // a filter framebuffer 
+    unsigned char *filter_framebuffer;        // a filter framebuffer
     unsigned char *eink_framebuffer_modified; // a filter framebuffer that has been modified
 
     unsigned char *eink_framebuffer_swapped; // an 'eink_framebuffer' with bytes swapped
@@ -276,9 +276,15 @@ static int mirroring_task()
             exit(EXIT_SUCCESS);
         }
         if (ack2[1] == 1)
+        {
             mouse_moved = 1;
+           // printf("moved\n");
+        }
         else
+        {
             mouse_moved = 0;
+         //   printf("not moved\n");
+        }
         if (ack2[2] == 1)
             pseudo_greyscale_mode = 1;
         else
@@ -428,7 +434,7 @@ int main(int argc, char *argv[])
     printf("pseudo_greyscale_mode: %d\n", esp32_settings[7]);
     printf("selective_compression: %d\n", selective_compression = esp32_settings[8]);
     printf("nb_chunks: %d\n", nb_chunks = esp32_settings[9]);
-  //  printf("improve_dither: %d\n", improve_dither = std::stoi(argv[15]));
+    //  printf("improve_dither: %d\n", improve_dither = std::stoi(argv[15]));
 
     if (disable_logging == 1)
         printf("logging disabled \n");

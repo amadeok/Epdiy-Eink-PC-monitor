@@ -121,13 +121,13 @@ def check_for_difference_esp_fun(array_list, bit_depth):
         elif bit_depth == 1:
             if array_list[0][startt:endd] != array_list[1][startt:endd]:
                 try:   
-                    dif_list[t] = 1; 
+                    dif_list[t+1] = 1; 
                 except: pass
                 dif_list_sum += 1
                 #print(f"row {t} is different")
             else:
                 try: 
-                    dif_list[t] = 0; 
+                    dif_list[t+1] = 0; 
                 except: pass
         startt += chunk_size
         endd += chunk_size
@@ -152,15 +152,10 @@ def pipe_output_f(raw_files, np_image_file, mouse_moved):
             except: pass
             shm_a.close()
         sys.exit(f'Python capture ID {display_id} terminated')
-    elif mouse_moved:
-        pipe_settings[1] = 1
-    else:        
-        pipe_settings[1] = 1
 
-    if pseudo_greyscale_mode == 1:
-        pipe_settings[2] = 1
-    else: 
-        pipe_settings[2] = 0
+    pipe_settings[1] = mouse_moved
+
+    pipe_settings[2] = pseudo_greyscale_mode
 
     os.write(fd0, pipe_settings)
 
@@ -602,7 +597,7 @@ with mss.mss() as sct:
         if pipe_output:  # and dif_list_sum
             if pipe_bit_depth == 1:
                 mouse_moved = draw_cursor_1bpp(display_list[0], raw_files[0])
-
+                
                 byte_frag = pipe_output_f(raw_files, np_image_file, mouse_moved)  # 1bpp->raw_files[0]
             elif pipe_bit_depth == 8:
                 byte_frag = pipe_output_f(np_image_file, np_image_file, mouse_moved)  # 1bpp->raw_files[0]

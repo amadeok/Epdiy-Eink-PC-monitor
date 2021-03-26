@@ -170,10 +170,14 @@ def draw_cursor_1bpp(conf, byte_string_raw):
         # image_file = image_file.transpose(Image.FLIP_TOP_BOTTOM) 
         # image_file.save(f"{path}cursortest.bmp")
         # byte_string_raw2 = output.getvalue()z
-        if previous_pos.x != pos2.x and previous_pos.y != pos2.y:
-            return 1
-        else:
+        if previous_pos.x == pos2.x and previous_pos.y == pos2.y:
+            #print(f" not moved px {previous_pos.x}, cx {pos2.x}, py {previous_pos.y}, cy {pos2.y}")
             return 0
+        else:
+            #print(f" moved ::  px {previous_pos.x}, cx {pos2.x}, py {previous_pos.y}, cy {pos2.y}")
+            return 1
+    else:
+        return 0
 
 def generate_cursor():
     wp = b'\xff\xff\xff\xff'
