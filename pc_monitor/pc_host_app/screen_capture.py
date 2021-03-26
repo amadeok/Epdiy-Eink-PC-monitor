@@ -112,25 +112,29 @@ def check_for_difference_esp_fun(array_list, bit_depth):
             arr2 = array_list[1][t]
             ret = np.array_equal(arr, arr2)
             if ret == False:
-                dif_list[t] = 1
+                dif_list[t+1] = 1
                 dif_list_sum += 1
                 #print(f"row {t} is different")
             else:
-                dif_list[t] = 0
+                dif_list[t+1] = 0
                 #print(f"not different")
         elif bit_depth == 1:
             if array_list[0][startt:endd] != array_list[1][startt:endd]:
-                dif_list[t] = 1
+                try:   
+                    dif_list[t] = 1; 
+                except: pass
                 dif_list_sum += 1
                 #print(f"row {t} is different")
             else:
-                dif_list[t] = 0
+                try: 
+                    dif_list[t] = 0; 
+                except: pass
         startt += chunk_size
         endd += chunk_size
     #print("check dif took", time.time() - t0)
 
 def pipe_output_f(raw_files, np_image_file, mouse_moved):
-    byte_frag = raw_files
+    byte_frag = raw_files[0]
     if child_process ==  0:
         end_val = exiting
     else: end_val = shared_buffer[0]
@@ -161,6 +165,7 @@ def pipe_output_f(raw_files, np_image_file, mouse_moved):
     os.write(fd0, pipe_settings)
 
     if check_for_difference_esp == 1:
+        check_for_difference_esp_fun(raw_files[2], 1)
         os.write(fd0, dif_list)
     os.write(fd0, byte_frag)
     # if display_list[0].improve_dither:
@@ -268,17 +273,18 @@ class display_settings:
         self.rmt_high_time= int(settings_list[11][1])
         self.enable_skipping =  int(settings_list[12][1])
         self.epd_skip_threshold =  int(settings_list[13][1])
-        self.framebuffer_cycles_2 =  int(settings_list[14][1])
-        self.framebuffer_cycles_2_threshold =  int(settings_list[15][1])
-        self.pseudo_greyscale_mode =  int(settings_list[16][1])
-        self.color =  float(settings_list[17][1])
-        self.contrast =  float(settings_list[18][1])
-        self.brightness =   float(settings_list[19][1])
-        self.sharpness =  float(settings_list[20][1])
-        self.enhance_before_greyscale =   int(settings_list[21][1])
+        self.epd_skip_mouse_only =  int(settings_list[14][1])
+        self.framebuffer_cycles_2 =  int(settings_list[15][1])
+        self.framebuffer_cycles_2_threshold =  int(settings_list[16][1])
+        self.pseudo_greyscale_mode =  int(settings_list[17][1])
+        self.color =  float(settings_list[18][1])
+        self.contrast =  float(settings_list[19][1])
+        self.brightness =   float(settings_list[20][1])
+        self.sharpness =  float(settings_list[21][1])
+        self.enhance_before_greyscale =   int(settings_list[22][1])
 
-        self.selective_compression = int(settings_list[22][1])
-        self.nb_chunks =  int(settings_list[23][1])
+        self.selective_compression = int(settings_list[23][1])
+        self.nb_chunks =  int(settings_list[24][1])
         self.disable_logging = settings_list[len(settings_list)-1]
 
         self.width_res2 = self.width + self.x_offset
@@ -485,6 +491,7 @@ with mss.mss() as sct:
                 f'{display_list[x].rmt_high_time}',
                 f'{display_list[x].enable_skipping}',
                 f'{display_list[x].epd_skip_threshold}',
+                f'{display_list[x].epd_skip_mouse_only}',
                 f'{display_list[x].framebuffer_cycles_2}',
                 f'{display_list[x].framebuffer_cycles_2_threshold}',
                 f'{display_list[x].pseudo_greyscale_mode}',
@@ -596,7 +603,7 @@ with mss.mss() as sct:
             if pipe_bit_depth == 1:
                 mouse_moved = draw_cursor_1bpp(display_list[0], raw_files[0])
 
-                byte_frag = pipe_output_f(raw_files[0], np_image_file, mouse_moved)  # 1bpp->raw_files[0]
+                byte_frag = pipe_output_f(raw_files, np_image_file, mouse_moved)  # 1bpp->raw_files[0]
             elif pipe_bit_depth == 8:
                 byte_frag = pipe_output_f(np_image_file, np_image_file, mouse_moved)  # 1bpp->raw_files[0]
         if disable_logging == 0:

@@ -138,33 +138,20 @@ Advanced settings:
 
 - *framebuffer_cycles_2* and *framebuffer_cycles_2_threshold*: If less than *framebuffer_cycles_2_threshold* number of rows have changed, the current framebuffer will be written *framebuffer_cycles_2* times instead of the value set by *framebuffer_cycles*. Can be used to reduce the draw time when just a few lines have changed such as when moving the cursor. This is only active is the mouse is moving
 
-#### Hotkeys:
+####Hotkeys:
 It is possible to change the following settings while the application is running by pressing their hotkey on the terminal:
-
-- *m* toggles the pseudo greyscale mode
-
-- *1* decreases *color* by 0.1
-
-- *2* increases *color* by 0.1
-
-- *3* decreases *contrast* by 0.1
-
-- *4* increases *contrast* by 0.1
-
-- *5* decreases *brightness* by 0.1
-
-- *6* increases *brightness* by 0.1
-
-- *7* decreases *sharpness* by 0.1
-
-- *8* increases *sharpness* by 0.1
-
-- *9* increases *grey_monochrome_threshold* by 10
-
-- *0* decreases *grey_monochrome_threshold* by 10
-
-- *b* toggles *enhance_before_greyscale*
-
+-*m* toggles the pseudo greyscale mode
+-*1* decreases *color* by 0.1
+-*2* increases *color* by 0.1
+-*3* decreases *contrast* by 0.1
+-*4* increases *contrast* by 0.1
+-*5* decreases *brightness* by 0.1
+-*6* increases *brightness* by 0.1
+-*7* decreases *sharpness* by 0.1
+-*8* increases *sharpness* by 0.1
+-*9* increases *grey_monochrome_threshold* by 10
+-*0* decreases *grey_monochrome_threshold* by 10
+-*b* toggles *enhance_before_greyscale*
 
 #### Using multiple displays at the same time
 
@@ -194,6 +181,7 @@ If the display you want to try has a different resolution, other than selecting 
 - Organize the code better
 - Improve ghosting
 - Optimize data transfer between pc and board
+
 
 
 

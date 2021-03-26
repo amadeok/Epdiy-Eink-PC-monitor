@@ -408,6 +408,7 @@ int main(int argc, char *argv[])
     esp32_settings[6] = std::stoi(argv[12]);
     esp32_settings[7] = std::stoi(argv[13]);
     esp32_settings[8] = std::stoi(argv[14]);
+    esp32_settings[9] = std::stoi(argv[15]);
 
     disable_logging = std::stoi(argv[nb_args - 2]);
     wifi_on = std::stoi(argv[nb_args - 1]);
@@ -420,11 +421,13 @@ int main(int argc, char *argv[])
     printf("rmt_high_time: %d\n", esp32_settings[1]);
     printf("enable_skipping: %d\n", esp32_settings[2]);
     printf("epd_skip_threshold: %d\n", esp32_settings[3]);
-    printf("framebuffer_cycles_2: %d\n", esp32_settings[4]);
-    printf("framebuffer_cycles_2_threshold: %d\n", esp32_settings[5]);
-    printf("pseudo_greyscale_mode: %d\n", esp32_settings[6]);
-    printf("selective_compression: %d\n", selective_compression = esp32_settings[7]);
-    printf("nb_chunks: %d\n", nb_chunks = esp32_settings[8]);
+    printf("epd_skip_mouse_only: %d\n", esp32_settings[4]);
+
+    printf("framebuffer_cycles_2: %d\n", esp32_settings[5]);
+    printf("framebuffer_cycles_2_threshold: %d\n", esp32_settings[6]);
+    printf("pseudo_greyscale_mode: %d\n", esp32_settings[7]);
+    printf("selective_compression: %d\n", selective_compression = esp32_settings[8]);
+    printf("nb_chunks: %d\n", nb_chunks = esp32_settings[9]);
   //  printf("improve_dither: %d\n", improve_dither = std::stoi(argv[15]));
 
     if (disable_logging == 1)

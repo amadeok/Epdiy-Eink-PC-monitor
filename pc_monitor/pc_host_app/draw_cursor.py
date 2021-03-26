@@ -169,7 +169,7 @@ def draw_cursor_1bpp(conf, byte_string_raw):
         #     image_file   = image_file.rotate(180,  expand=True)
         # image_file = image_file.transpose(Image.FLIP_TOP_BOTTOM) 
         # image_file.save(f"{path}cursortest.bmp")
-        # byte_string_raw2 = output.getvalue()
+        # byte_string_raw2 = output.getvalue()z
         if previous_pos.x != pos2.x and previous_pos.y != pos2.y:
             return 1
         else:

@@ -72,7 +72,7 @@ int total_nb_pixels, eink_framebuffer_size, chunk_size, nb_chunks = 5, nb_rows_p
 int framebuffer_cycles; // sets the number of times to write the current framebuffer to the screen
 int rmt_high_time;      // defined in rmt_pulse.h, a higher value makes blacks blacker and whites whiter
 int framebuffer_cycles_2, framebuffer_cycles_2_threshold;
-int enable_skipping, epd_skip_threshold;
+int enable_skipping, epd_skip_threshold, epd_skip_mouse_only;
 int pseudo_greyscale_mode;
 int selective_compression;
 
@@ -461,10 +461,12 @@ void receive_settings(const int sock)
   printf("rmt_high_time %d \n", rmt_high_time = settings[1]);
   printf("enable_skipping %d \n", enable_skipping = settings[2]);
   printf("epd_skip_threshold %d \n", epd_skip_threshold = settings[3]);
-  printf("framebuffer_cycles_2 %d \n", framebuffer_cycles_2 = settings[4]);
-  printf("framebuffer_cycles_2_threshold %d \n", framebuffer_cycles_2_threshold = settings[5]);
-  printf("pseudo_greyscale_mode %d \n", pseudo_greyscale_mode = settings[6]);
-  printf("selective_compression %d \n", selective_compression = settings[7]);
+  //printf("epd_skip_mouse_only %d \n", epd_skip_mouse_only = settings[4]);
+
+  printf("framebuffer_cycles_2 %d \n", framebuffer_cycles_2 = settings[5]);
+  printf("framebuffer_cycles_2_threshold %d \n", framebuffer_cycles_2_threshold = settings[6]);
+  printf("pseudo_greyscale_mode %d \n", pseudo_greyscale_mode = settings[7]);
+  printf("selective_compression %d \n", selective_compression = settings[8]);
   printf("################# \n");
   // already_got_settings = true;
 }
