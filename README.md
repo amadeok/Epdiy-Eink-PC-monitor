@@ -123,6 +123,8 @@ When converting the capture from 256 greyscale shades to black and white monochr
 
 - - *pseudo_greyscale_mode* enables the pseudo greyscale mode which is monochrome with dithering (experimental). it is possible to switch from monochrome to this mode while the mirroring is running by pressing 'm' on terminal
 
+- *invert* inverts the colors of the image
+
 - *color, contrast, brightness, sharpness*: the Pillow module has the option to apply these enhancements to the capture. They are applied before converting the image to 1 bit per pixel. more info: https://pillow.readthedocs.io/en/stable/reference/ImageEnhance.html
 (experimental)
 
@@ -152,6 +154,7 @@ It is possible to change the following settings while the application is running
 -*9* increases *grey_monochrome_threshold* by 10
 -*0* decreases *grey_monochrome_threshold* by 10
 -*b* toggles *enhance_before_greyscale*
+-*i* toggles *invert*
 
 #### Using multiple displays at the same time
 
@@ -167,7 +170,10 @@ python3 screen_capture.py display1.conf
 ```bash
 python3 screen_capture.py display2.conf
 ```
-Each from a different terminal
+Each from a different terminal. If you want that a hotkey press has an effect on all the running instances, append *-common* to each command:
+```bash
+python3 screen_capture.py display0.conf -common
+```
 
 ------------
 #### Support for other displays
