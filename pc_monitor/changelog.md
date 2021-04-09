@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.042] - 09-04-2021
+-Added option to invert image
+-Added feature to choose wether hotkeys presses affect all instances of the running applications or only the one on which they are used  
+-Fixed detecting mouse movement not working properly
+
+
 ## [0.041] - 26-03-2021
 -Fixed enable_skipping option not working
 
