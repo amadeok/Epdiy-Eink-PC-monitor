@@ -121,9 +121,9 @@ When converting the capture from 256 greyscale shades to black and white monochr
 
 - *rmt_high_time*: Defines the high tick time of the CKV signal. A higher value makes blacks blacker and whites whiter. Increases draw time. It is defined in *rmt_pulse.h*
 
-- - *pseudo_greyscale_mode* enables the pseudo greyscale mode which is monochrome with dithering (experimental). it is possible to switch from monochrome to this mode while the mirroring is running by pressing 'm' on terminal
+- *pseudo_greyscale_mode* enables the pseudo greyscale mode which is monochrome with dithering (experimental). it is possible to switch from monochrome to this mode while the mirroring is running by pressing 'm' on terminal
 
-- *invert* inverts the colors of the image
+- *invert*: inverts the colors of the image
 
 - *color, contrast, brightness, sharpness*: the Pillow module has the option to apply these enhancements to the capture. They are applied before converting the image to 1 bit per pixel. more info: https://pillow.readthedocs.io/en/stable/reference/ImageEnhance.html
 (experimental)
@@ -140,21 +140,21 @@ Advanced settings:
 
 - *framebuffer_cycles_2* and *framebuffer_cycles_2_threshold*: If less than *framebuffer_cycles_2_threshold* number of rows have changed, the current framebuffer will be written *framebuffer_cycles_2* times instead of the value set by *framebuffer_cycles*. Can be used to reduce the draw time when just a few lines have changed such as when moving the cursor. This is only active is the mouse is moving
 
-####Hotkeys:
+#### Hotkeys:
 It is possible to change the following settings while the application is running by pressing their hotkey on the terminal:
--*m* toggles the pseudo greyscale mode
--*1* decreases *color* by 0.1
--*2* increases *color* by 0.1
--*3* decreases *contrast* by 0.1
--*4* increases *contrast* by 0.1
--*5* decreases *brightness* by 0.1
--*6* increases *brightness* by 0.1
--*7* decreases *sharpness* by 0.1
--*8* increases *sharpness* by 0.1
--*9* increases *grey_monochrome_threshold* by 10
--*0* decreases *grey_monochrome_threshold* by 10
--*b* toggles *enhance_before_greyscale*
--*i* toggles *invert*
+- *m* toggles the pseudo greyscale mode
+- *1* decreases *color* by 0.1
+- *2* increases *color* by 0.1
+- *3* decreases *contrast* by 0.1
+- *4* increases *contrast* by 0.1
+- *5* decreases *brightness* by 0.1
+- *6* increases *brightness* by 0.1
+- *7* decreases *sharpness* by 0.1
+- *8* increases *sharpness* by 0.1
+- *9* increases *grey_monochrome_threshold* by 10
+- *0* decreases *grey_monochrome_threshold* by 10
+- *b* toggles *enhance_before_greyscale*
+- *i* toggles *invert*
 
 #### Using multiple displays at the same time
 
