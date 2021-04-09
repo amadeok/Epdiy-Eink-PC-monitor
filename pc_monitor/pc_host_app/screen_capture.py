@@ -1,7 +1,7 @@
 import mss
 import os, sys
 import pyautogui
-from PIL import Image, ImageEnhance
+from PIL import Image, ImageEnhance, ImageOps
 
 
 import time
@@ -177,6 +177,8 @@ def write_to_shared_mem(obj, increase, type):
         shared_buffer[obj.pos:obj.pos+4] = float_to_bytearray(obj.value)    
     elif type == 'i':
         shared_buffer[obj.pos:obj.pos+4] = obj.value.to_bytes(4,  byteorder = 'big', signed=True)
+    elif type == 'a':
+        shared_buffer[obj.pos:obj.pos+4] = increase.to_bytes(4,  byteorder = 'big', signed=True)
 
 def get_val_from_shm(obj, type):
     if type == 'f':
@@ -211,6 +213,13 @@ def check_key_presses(PID_list, conf):
             else:
                 write_to_shared_mem(conf.pseudo_greyscale_mode, +1, 'i')
                 print("Pseudo greyscale mode is on ", get_val_from_shm(conf.pseudo_greyscale_mode, 'i'))
+        elif x == 'i' or x == 'I':
+            if get_val_from_shm(conf.invert, 'i') == 1:
+                write_to_shared_mem(conf.invert, -1, 'i')
+                print("Invert is off ", get_val_from_shm(conf.invert, 'i'))
+            else:
+                write_to_shared_mem(conf.invert, +1, 'i')
+                print("Invert is on ", get_val_from_shm(conf.invert, 'i'))
         elif x == '1':
             write_to_shared_mem(conf.color, -0.1, 'f')
         elif x == '2':
@@ -251,36 +260,52 @@ def check_key_presses(PID_list, conf):
 
     termios.tcsetattr(sys.stdin, termios.TCSADRAIN, orig_settings)
 
+class volatile_settings:
+    def __init__():
+        pass
+
 class display_settings:
     def __init__(self, settings_list):
-        self.ip_address = settings_list[0][1]
-        self.display_id = int(settings_list[1][1])
-        self.width = int(settings_list[2][1])
-        self.height = int(settings_list[3][1])
-        self.x_offset = int(settings_list[4][1])
-        self.y_offset = int(settings_list[5][1])
-        self.rotation = int(settings_list[6][1])
-        self.grey_to_monochrome_threshold = int(settings_list[7][1])
 
-        self.sleep_time= int(settings_list[8][1]) 
-        self.refresh_every_x_frames = int(settings_list[9][1])
-        self.framebuffer_cycles = int(settings_list[10][1])
-        self.rmt_high_time= int(settings_list[11][1])
-        self.enable_skipping =  int(settings_list[12][1])
-        self.epd_skip_threshold =  int(settings_list[13][1])
-        self.epd_skip_mouse_only =  int(settings_list[14][1])
-        self.framebuffer_cycles_2 =  int(settings_list[15][1])
-        self.framebuffer_cycles_2_threshold =  int(settings_list[16][1])
-        self.pseudo_greyscale_mode =  int(settings_list[17][1])
-        self.color =  float(settings_list[18][1])
-        self.contrast =  float(settings_list[19][1])
-        self.brightness =   float(settings_list[20][1])
-        self.sharpness =  float(settings_list[21][1])
-        self.enhance_before_greyscale =   int(settings_list[22][1])
+        d = {}
+        for y in range(len(settings_list)):
+            d[settings_list[y][0]] = settings_list[y][1]
 
-        self.selective_compression = int(settings_list[23][1])
-        self.nb_chunks =  int(settings_list[24][1])
-        self.disable_logging = settings_list[len(settings_list)-1]
+        def get_val(string, type):
+            if type == 'i':
+                return int(d[string+':'])
+            elif type == 'f':
+                return float(d[string+':'])
+                
+        self.ip_address = d['ip_address:']
+        self.display_id = get_val('id', 'i')
+        self.width = get_val('width', 'i')
+        self.height = get_val('height', 'i')
+        self.x_offset = get_val('x_offset', 'i')
+        self.y_offset = get_val('y_offset', 'i')
+        self.rotation = get_val('rotation', 'i')
+        self.grey_to_monochrome_threshold = get_val('grey_monochrome_threshold', 'i')
+
+        self.sleep_time= get_val('sleep_time', 'i')
+        self.refresh_every_x_frames =get_val('refresh_every_x_frames', 'i')
+        self.framebuffer_cycles = get_val('framebuffer_cycles', 'i')
+        self.rmt_high_time= get_val('rmt_high_time', 'i')
+        self.enable_skipping =  get_val('enable_skipping', 'i')
+        self.epd_skip_threshold =  get_val('epd_skip_threshold', 'i')
+        self.epd_skip_mouse_only = get_val('epd_skip_mouse_only', 'i')
+        self.framebuffer_cycles_2 =  get_val('framebuffer_cycles_2', 'i')
+        self.framebuffer_cycles_2_threshold =  get_val('framebuffer_cycles_2_threshold', 'i')
+        self.pseudo_greyscale_mode =  get_val('pseudo_greyscale_mode', 'i')
+        self.color =  get_val('color', 'f')
+        self.contrast =  get_val('contrast', 'f')
+        self.brightness = get_val('brightness', 'f')
+        self.sharpness =get_val('sharpness', 'f')
+        self.invert = get_val('invert', 'i')
+        self.enhance_before_greyscale =  get_val('enhance_before_greyscale', 'i')
+
+        self.selective_compression =get_val('selective_compression', 'i')
+        self.nb_chunks =  get_val('nb_chunks', 'i')
+        self.disable_logging = get_val('disable_logging', 'i')
 
         self.width_res2 = self.width + self.x_offset
         self.height_res2 = self.height + self.y_offset
@@ -307,6 +332,7 @@ class shared_var:
         self.sharpness =  offset_object(26, 0)
         self.enhance_before_greyscale = offset_object(30, 0)
         self.grey_to_monochrome_threshold =   offset_object(34, 0)
+        self.invert =   offset_object(38, 0)
 
 
 
@@ -322,9 +348,18 @@ def get_display_settings(conf_file, disable_logging):
         #numbers = [int(n) for n in number_strings]  # Convert to integers
         if line != '' and line != '\n':
             display_conf.append(number_strings)  # Add the "row" to your list.
-    display_conf.append(disable_logging)
+    display_conf.append(['disable_logging:', disable_logging])
     generate_display_class(display_conf)
     
+def write_initial_settings(shared, conf):
+    write_to_shared_mem(shared.pseudo_greyscale_mode, conf.pseudo_greyscale_mode, 'a')
+    write_to_shared_mem(shared.color, conf.color, 'a')
+    write_to_shared_mem(shared.contrast, conf.contrast, 'a')
+    write_to_shared_mem(shared.brightness, conf.brightness, 'a')
+    write_to_shared_mem(shared.sharpness, conf.sharpness, 'a')
+    write_to_shared_mem(shared.enhance_before_greyscale, conf.enhance_before_greyscale, 'a')
+    write_to_shared_mem(shared.grey_to_monochrome_threshold, conf.grey_to_monochrome_threshold, 'a')
+    write_to_shared_mem(shared.invert, conf.invert, 'a')
 
 
 def apply_enhancements(image_file, conf, offsets):
@@ -364,7 +399,9 @@ def convert_to_greyscale_and_enhance(image_file, conf, offset_variables):
         image_file = apply_enhancements(image_file, conf, offset_variables)
 
     image_file = image_file.convert('L')
-
+    if get_val_from_shm(offset_variables.invert, 'i')  == 1:
+        image_file = ImageOps.invert(image_file)
+    
     if get_val_from_shm(offset_variables.enhance_before_greyscale, 'i')  == 0:
         image_file = apply_enhancements(image_file, conf, offset_variables)
     return image_file
@@ -373,12 +410,13 @@ child_process = 0
 with mss.mss() as sct:
     args = str(sys.argv)
     
-    disable_logging = 0
+    disable_logging = '0'
     has_childs = 0
     disable_wifi = 0
+    common = 0
     try:
         ret = sys.argv.remove("-silent")
-        disable_logging = 1
+        disable_logging = '1'
     except: pass
     try:
         ret = sys.argv.remove("child")
@@ -387,6 +425,10 @@ with mss.mss() as sct:
     try:
         ret = sys.argv.remove("-disable_wifi")
         disable_wifi = 1
+    except: pass
+    try:
+        ret = sys.argv.remove("-common")
+        common = 1
     except: pass
     nb_arg = len(sys.argv)
     nb_displays = nb_arg -1
@@ -456,14 +498,25 @@ with mss.mss() as sct:
     PID_list.append(pid0)
 
     global shared_buffer
-    try: shm_a = shared_memory.SharedMemory(create=True, size=100, name='screen_capture_shm')
-    except: shm_a = shared_memory.SharedMemory(name='screen_capture_shm')
+    if common == 1:
+        try: 
+            shm_a = shared_memory.SharedMemory(create=True, size=100, name='screen_capture_shm')
+        except: 
+            shm_a = shared_memory.SharedMemory(name='screen_capture_shm')
+    else:
+        randi = randint(0, 99000)
+        try: 
+            shm_a = shared_memory.SharedMemory(create=True, size=100, name=f'screen_capture_shm{randi}')
+        except: 
+            shm_a = shared_memory.SharedMemory(name=f'screen_capture_shm{randi}')
     shared_buffer = shm_a.buf
 
     ba = float_to_bytearray(1.23)
 
     global offset_variables
     offset_variables = shared_var()
+
+    #write_initial_settings(offset_variables, display_list[0])
 
     if disable_wifi:
         wifi_on = 0
@@ -601,7 +654,7 @@ with mss.mss() as sct:
                 byte_frag = pipe_output_f(raw_files, np_image_file, mouse_moved)  # 1bpp->raw_files[0]
             elif pipe_bit_depth == 8:
                 byte_frag = pipe_output_f(np_image_file, np_image_file, mouse_moved)  # 1bpp->raw_files[0]
-        if disable_logging == 0:
+        if disable_logging == '0':
             print(f"Display ID: {display_id}, capture took {int(((time.time() - t0)*1000))}ms")
         time.sleep(sleep_time/1000)
 
