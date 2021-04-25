@@ -8,6 +8,10 @@
 #include <fstream>
 #include <rle_compression.h>
 
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
 extern unsigned char *compressed_eink_framebuffer_ptrs[8];
 extern unsigned char *decompressed_received;
 
@@ -47,7 +51,7 @@ void file_to_array(char array[], int array_size, int file_size, const char *path
     inFile.close();
 }
 
-void swap_bytes(unsigned char *eink_framebuffer, unsigned char *eink_framebuffer_swapped, int eink_framebuffer_size, int source_image_bit_depth)
+void swap_bytes(char *eink_framebuffer, char *eink_framebuffer_swapped, int eink_framebuffer_size, int source_image_bit_depth)
 { //swapping bytes is necessary to get them in the order that the board needs
     //   long t = getTick();
 
@@ -69,7 +73,7 @@ void improve_dither_compression(unsigned char *eink_framebuffer, int eink_frameb
     for (int h = 0; h < height; h++)
     {
         if (line_changed[h] == 0)
-            memset(eink_framebuffer+h*line_size, 0, line_size);
+            memset(eink_framebuffer + h * line_size, 0, line_size);
     }
 }
 
@@ -86,4 +90,26 @@ int extract_and_compare(unsigned char *eink_framebuffer_swapped, int g)
             return h;
         }
     }
+}
+
+DWORD pipe_read(HANDLE handle, void *buffer, DWORD nNumberOfBytesToRead, DWORD lpNumberOfBytesRead)
+{
+    DWORD ret;
+#ifdef __linux__
+    lpNumberOfBytesRead = read(HANDLE, buffer, nNumberOfBytesToRead * sizeof(unsigned char));
+#elif _WIN32
+    ReadFile(handle, buffer, sizeof(unsigned char) * nNumberOfBytesToRead, &lpNumberOfBytesRead, NULL);
+#endif
+    return lpNumberOfBytesRead;
+}
+
+DWORD pipe_write(HANDLE handle, void *buffer, DWORD nNumberOfBytesToWrite, DWORD lpNumberOfBytesWritten)
+
+{
+#ifdef __linux__
+    lpNumberOfBytesWritten = write(HANDLE, buffer, nNumberOfBytesToWrite);
+#elif _WIN32
+    WriteFile(handle, buffer, nNumberOfBytesToWrite, &lpNumberOfBytesWritten, NULL);
+#endif
+    return lpNumberOfBytesWritten;
 }

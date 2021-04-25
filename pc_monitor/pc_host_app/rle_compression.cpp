@@ -4,13 +4,13 @@
 #include <inttypes.h>
 #include <stdlib.h>
 #include <stdio.h>
-extern unsigned char *compressed_eink_framebuffer_ptrs[8];
+extern char *compressed_eink_framebuffer_ptrs[8];
 extern unsigned char *array_with_zeros, *draw_white_bytes, *draw_black_bytes;
 extern int compressed_chunk_lengths[8];
 extern int eink_framebuffer_size, chunk_size;
 extern char working_dir[256];
 
-void rle_extract1(unsigned char *decompressed, int nb_chunks, unsigned char *eink_framebuffer_swapped, const int eink_framebuffer_size, int compressed_size)
+void rle_extract1(char *decompressed, int nb_chunks, char *eink_framebuffer_swapped, const int eink_framebuffer_size, int compressed_size)
 {
     int counter = 0, counter2 = 0, id = 0, i = 0, j = 0, offset = 0, k;
     //  int plus10 = 0, plus50 = 0, plus30 = 0, plus70 = 0, plus90 = 0, minus = 0; //for testing
@@ -89,11 +89,10 @@ void rle_extract1(unsigned char *decompressed, int nb_chunks, unsigned char *ein
                 printf(" d ");
         }
     }
-
     //printf("10, 30, 50, 70, 90,  is %d, %d, %d, %d, %d, minus: %d \n", plus10, plus30, plus50, plus70, plus90, minus);
 }
 
-int rle_compress(unsigned char *array_to_compress, unsigned char tmp_array[], int nb_chunks, unsigned char compressed_eink_framebuffer[], const int total_nb_pixels, int chunk_size)
+int rle_compress(char *array_to_compress, char *tmp_array, int nb_chunks, char *compressed_eink_framebuffer, const int total_nb_pixels, int chunk_size)
 {
 
     uint8_t t[256];
@@ -261,7 +260,7 @@ int rle_compress_v2(unsigned char *array_to_compress, unsigned char tmp_array[],
     return counter2;
 }
 
-void optimize_rle(unsigned char *eink_framebuffer)
+void optimize_rle(char *eink_framebuffer)
 {
     for (int y = 0; y < eink_framebuffer_size; y++)
     {

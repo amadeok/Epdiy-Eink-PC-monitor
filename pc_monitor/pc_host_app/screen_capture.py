@@ -6,13 +6,25 @@ from PIL import Image, ImageEnhance, ImageOps
 
 import time
 import subprocess
-import termios, tty
 import io, struct
 from random import randint
 import numpy as np
 import threading
 from draw_cursor import generate_cursor, draw_cursor, draw_cursor_1bpp
 from multiprocessing import shared_memory, resource_tracker, Value
+import platform
+
+windows= None; linux = None
+if platform.system() == 'Linux': linux = True; 
+elif platform.system() == 'Windows': windows = True;
+else: print("Unknown platform")
+if linux:
+    import termios, tty
+    tty.setcbreak(sys.stdin)
+elif windows:
+    #import keyboard
+    import msvcrt
+    import win32pipe, win32file, pywintypes, win32api
 
 
 width_res = 0
@@ -21,10 +33,7 @@ width_res2 = 0
 height_res2 = 0
 tot_nb_pixels = 0
 
-chunk_size = 0
-# monitor = {"top": y_offset, "left": x_offset,
-#            "width": width_res, "height": height_res} 
-
+chunk_size = 0 
 working_dir = os.getcwd()
 
 first_white_arr_array = np.full((tot_nb_pixels), 255, dtype=np.uint8)
@@ -41,20 +50,54 @@ pipe_settings = bytearray(b'\x00\x00\x00')
 print_settings = 0
 
 input_file = ""
-tty.setcbreak(sys.stdin)
 
 display_list = []
 display_conf = []
 
-def create_pipes(output_pipe, input_pipe):
-    try:
-        os.mkfifo(output_pipe)
-    except OSError as oe:
-        pass
-    try:
-        os.mkfifo(input_pipe)
-    except OSError as oe:
-        pass
+
+
+def create_pipes(output_pipe, input_pipe, id):
+    pipe_a = "epdiy_pc_monitor_a_"
+    pipe_b  = "epdiy_pc_monitor_b_"
+    if linux:
+        output_pipe = '/tmp/' + output_pipe
+        input_pipe = '/tmp/' + input_pipe
+
+        if os.path.exists(output_pipe) == False:    
+            os.mkfifo(output_pipe)
+        
+        if os.path.exists(input_pipe) == False:    
+            os.mkfifo(input_pipe)
+        fd1 = os.open(input_pipe, os.O_RDONLY)
+        fd0 = os.open(output_pipe, os.O_WRONLY)
+        return fd1, fd0
+    elif windows:
+        quit = 0
+        output_pipe =  r'\\.\pipe\epdiy_pc_monitor_a_' + str(id)
+        input_pipe =  r'\\.\pipe\epdiy_pc_monitor_b_' + str(id)
+
+
+        while not quit:
+            try:
+                fd1 = win32file.CreateFile( input_pipe, win32file.GENERIC_READ | win32file.GENERIC_WRITE,  0,  None, win32file.CREATE_NEW,  0,  None)
+                #res = win32pipe.SetNamedPipeHandleState(fd1, win32pipe.PIPE_READMODE_MESSAGE, None, None)
+                
+            except pywintypes.error as e:
+                if e.args[0] == 2:
+                    print("No Input pipe, trying again in a sec")
+                    time.sleep(1)
+                continue
+            quit = 1
+        print(f"Python capture ID {id}: Input pipe opened")
+
+        mode = win32pipe.PIPE_TYPE_MESSAGE | win32pipe.PIPE_READMODE_MESSAGE | win32pipe.PIPE_WAIT
+        fd0 = win32pipe.CreateNamedPipe( output_pipe, win32pipe.PIPE_ACCESS_DUPLEX, mode, 1, 65536*16, 65536*16, 0, None)
+        ret = win32pipe.ConnectNamedPipe(fd0, None)
+        if ret != 0:
+            print("error fd0", win32api.GetLastError())
+        print(f'Python capture ID {id}: Output pipe opened')
+        return fd1, fd0
+
 
 def get_nb_bytes_pad():
     global width_res
@@ -140,7 +183,10 @@ def pipe_output_f(raw_files, np_image_file, mouse_moved):
     else: end_val = shared_buffer[0]
 
     if end_val == 101:
-        os.write(fd0, shared_buffer[0:2])
+
+        if linux: os.write(fd0, shared_buffer[0:2])
+        elif windows: win32file.WriteFile(fd0, shared_buffer[0:2])
+
         time.sleep(0.5)
         if child_process == 0:
             time.sleep(1.5)
@@ -157,12 +203,17 @@ def pipe_output_f(raw_files, np_image_file, mouse_moved):
 
     pipe_settings[2] = pseudo_greyscale_mode
 
-    os.write(fd0, pipe_settings)
+    if linux: os.write(fd0, pipe_settings)
+    elif windows: win32file.WriteFile(fd0, pipe_settings)
 
     if check_for_difference_esp == 1:
         check_for_difference_esp_fun(raw_files[2], 1)
-        os.write(fd0, dif_list)
-    os.write(fd0, byte_frag)
+
+        if linux: os.write(fd0, dif_list)
+        elif windows: win32file.WriteFile(fd0, dif_list)
+
+    if linux: os.write(fd0, byte_frag)
+    elif windows: win32file.WriteFile(fd0, byte_frag)
     # if display_list[0].improve_dither:
     #     ready = os.read(fd1, 1)
     #     os.write(fd0, pipe_settings)
@@ -187,12 +238,18 @@ def get_val_from_shm(obj, type):
         return int.from_bytes(shared_buffer[obj.pos:obj.pos+4], byteorder='big', signed=True)
 
 
+
 def check_key_presses(PID_list, conf):
     x = 0
-    orig_settings = termios.tcgetattr(sys.stdin)
+    if linux:
+        orig_settings = termios.tcgetattr(sys.stdin)
+
     global exiting; global print_settings
     while 1 and exiting == 0:  # ESC
-        x = sys.stdin.read(1)[0]
+        if linux:
+            x = sys.stdin.read(1)[0]
+        elif windows:
+            x = msvcrt.getch().decode('UTF-8')
         if x == 'q' or x == 'Q':
             print("Exiting")
             if has_childs == 1:
@@ -257,8 +314,8 @@ def check_key_presses(PID_list, conf):
                 #print(f"color {get_val_from_shm(conf.color, 'f')}, contrast  {get_val_from_shm(conf.contrast, 'f')}  brightness {get_val_from_shm(conf.brightness, 'f')}, sharpness {get_val_from_shm(conf.sharpness, 'f')},  grey_to_monochrome_threshold {get_val_from_shm(conf.grey_to_monochrome_threshold, 'i')}")
         except: pass
         
-
-    termios.tcsetattr(sys.stdin, termios.TCSADRAIN, orig_settings)
+    if linux:
+        termios.tcsetattr(sys.stdin, termios.TCSADRAIN, orig_settings)
 
 class volatile_settings:
     def __init__():
@@ -306,6 +363,7 @@ class display_settings:
         self.selective_compression =get_val('selective_compression', 'i')
         self.nb_chunks =  get_val('nb_chunks', 'i')
         self.do_full_refresh = get_val('do_full_refresh', 'i')
+
         self.disable_logging = get_val('disable_logging', 'i')
 
         self.width_res2 = self.width + self.x_offset
@@ -486,7 +544,7 @@ with mss.mss() as sct:
     pipe_output = 1
     enable_raw_output = 1
     pseudo_greyscale_mode = display_list[0].pseudo_greyscale_mode
-    save_bmp = 0
+    save_bmp = 1
     check_for_difference_esp = 1
     ###################
     generate_cursor()
@@ -499,7 +557,7 @@ with mss.mss() as sct:
     PID_list.append(pid0)
 
     global shared_buffer
-    if common == 1 or len(display_list) > 1 or child_process:
+    if common == 1:
         try: 
             shm_a = shared_memory.SharedMemory(create=True, size=100, name='screen_capture_shm')
         except: 
@@ -526,11 +584,14 @@ with mss.mss() as sct:
 
         if pipe_output and start_process:
             shared_buffer[0:100] = bytearray(100)
-            shared_buffer[10:14] = ba
-            ba2 = bytearray_to_float(shared_buffer[14:18])
-            buffer2 = bytearray(shared_buffer)
+            if windows:
+                binary = "process_capture.exe"
+            elif linux:
+                binary = "process_capture"
             for x in range(nb_displays):  
-                R = subprocess.Popen([f'{working_dir}/process_capture', 
+                time.sleep(0.5)
+
+                R = subprocess.Popen([f'{working_dir}/{binary}', 
                 f'{display_list[x].ip_address}',
                 f'{display_list[x].display_id}',
                 f'{display_list[x].width}',
@@ -545,13 +606,13 @@ with mss.mss() as sct:
                 f'{display_list[x].framebuffer_cycles_2_threshold}',
                 f'{display_list[x].pseudo_greyscale_mode}',
                 f'{display_list[x].selective_compression}',
+
                 f'{display_list[x].nb_chunks}', 
                 f'{display_list[x].do_full_refresh}', 
 
                 f'{display_list[x].disable_logging}',
                 f'{wifi_on}'])
 
-                time.sleep(0.5)
                 has_childs = 1
 
                 PID_list.append(R.pid)
@@ -577,17 +638,21 @@ with mss.mss() as sct:
         thread1.start()
     #for x in range 
 
-    if pipe_output:
-        output_pipe = f"/tmp/epdiy_pc_monitor_a_{display_id}"
-
-        input_pipe = f"/tmp/epdiy_pc_monitor_b_{display_id}"
-        create_pipes(output_pipe, input_pipe)
-
-        print("Opening pipes...")
-        fd1 = os.open(input_pipe, os.O_RDONLY)
-
-        fd0 = os.open(output_pipe, os.O_WRONLY)
-        print("Pipes opened")
+    if pipe_output:   
+        output_pipe = f"epdiy_pc_monitor_a_{display_id}"
+        input_pipe = f"epdiy_pc_monitor_b_{display_id}"
+        if linux:
+            output_pipe = f"/tmp/epdiy_pc_monitor_a_{display_id}"
+            input_pipe = f"/tmp/epdiy_pc_monitor_b_{display_id}"
+            create_pipes(output_pipe, input_pipe, display_id)
+            print("Opening pipes...")
+            fd1 = os.open(input_pipe, os.O_RDONLY)
+            fd0 = os.open(output_pipe, os.O_WRONLY)
+            print("Pipes opened")
+        elif windows:
+            fd1, fd0 = create_pipes(output_pipe, input_pipe, display_id)
+            output_pipe = r"\\.\pipe\epdiy_pc_monitor_a_0" 
+            #output_pipe += str(display_id)
 
 
     global sct_image
@@ -602,7 +667,8 @@ with mss.mss() as sct:
             switcher = 0;
         t0 = time.time()
 
-        ready = os.read(fd1, 1)
+        if linux: ready = os.read(fd1, 1)
+        elif windows: ret2 = win32file.ReadFile(fd1, 1)
 
         sct_img = sct.grab(monitor) #capture screen
 
