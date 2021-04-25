@@ -129,7 +129,7 @@ When converting the capture from 256 greyscale shades to black and white monochr
 (experimental)
 
 - *enhance_before_greyscale*: choose wether to apply the Pillow enhancements before or after converting to 8bpp greyscale
-
+- *do_full_refresh*:   calls epd_clear() to refresh screen
 
 Advanced settings:
 - *selective_compression* sets a maximum percentage of eficiency for the rle compression. if that percentage is not met, the framebuffer will be sent without compression to the board  
@@ -142,19 +142,19 @@ Advanced settings:
 
 #### Hotkeys:
 It is possible to change the following settings while the application is running by pressing their hotkey on the terminal:
-- *m* toggles the pseudo greyscale mode
-- *1* decreases *color* by 0.1
-- *2* increases *color* by 0.1
-- *3* decreases *contrast* by 0.1
-- *4* increases *contrast* by 0.1
-- *5* decreases *brightness* by 0.1
-- *6* increases *brightness* by 0.1
-- *7* decreases *sharpness* by 0.1
-- *8* increases *sharpness* by 0.1
-- *9* increases *grey_monochrome_threshold* by 10
-- *0* decreases *grey_monochrome_threshold* by 10
-- *b* toggles *enhance_before_greyscale*
-- *i* toggles *invert*
+-*m* toggles the pseudo greyscale mode
+-*1* decreases *color* by 0.1
+-*2* increases *color* by 0.1
+-*3* decreases *contrast* by 0.1
+-*4* increases *contrast* by 0.1
+-*5* decreases *brightness* by 0.1
+-*6* increases *brightness* by 0.1
+-*7* decreases *sharpness* by 0.1
+-*8* increases *sharpness* by 0.1
+-*9* increases *grey_monochrome_threshold* by 10
+-*0* decreases *grey_monochrome_threshold* by 10
+-*b* toggles *enhance_before_greyscale*
+-*i* toggles *invert*
 
 #### Using multiple displays at the same time
 
