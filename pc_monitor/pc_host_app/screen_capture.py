@@ -305,6 +305,7 @@ class display_settings:
 
         self.selective_compression =get_val('selective_compression', 'i')
         self.nb_chunks =  get_val('nb_chunks', 'i')
+        self.do_full_refresh = get_val('do_full_refresh', 'i')
         self.disable_logging = get_val('disable_logging', 'i')
 
         self.width_res2 = self.width + self.x_offset
@@ -498,7 +499,7 @@ with mss.mss() as sct:
     PID_list.append(pid0)
 
     global shared_buffer
-    if common == 1:
+    if common == 1 or len(display_list) > 1 or child_process:
         try: 
             shm_a = shared_memory.SharedMemory(create=True, size=100, name='screen_capture_shm')
         except: 
@@ -544,8 +545,8 @@ with mss.mss() as sct:
                 f'{display_list[x].framebuffer_cycles_2_threshold}',
                 f'{display_list[x].pseudo_greyscale_mode}',
                 f'{display_list[x].selective_compression}',
-
                 f'{display_list[x].nb_chunks}', 
+                f'{display_list[x].do_full_refresh}', 
 
                 f'{display_list[x].disable_logging}',
                 f'{wifi_on}'])

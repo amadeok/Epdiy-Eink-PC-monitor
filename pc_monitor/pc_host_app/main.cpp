@@ -10,12 +10,18 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+
+#ifdef __linux__ 
 #include <sys/socket.h>
 #include <arpa/inet.h> //inet_addr
-#include <64bitLUTc.h>
-//#include <fill_adj_v2_inv.h>
-
 #include <netinet/tcp.h>
+#elif _WIN32
+#include <winsock2.h>
+#pragma comment(lib,"ws2_32.lib") //Winsock Library
+#endif
+
+#include <64bitLUTc.h>
+
 #include <utils.h>
 #include <rle_compression.h>
 #include <generate_eink_framebuffer.h>
@@ -51,6 +57,8 @@ bool disable_logging;
 uint32_t loop_counter[1] = {0};
 int mouse_moved = 0;
 int pseudo_greyscale_mode = 0, improve_dither;
+int do_full_refresh = 1;
+unsigned char full_refresh_delay = 30;
 
 uint8_t ready0[6];
 uint8_t ready1[6];
@@ -76,6 +84,13 @@ void wifi_transfer(unsigned char *eink_framebuffer_swapped, int eink_framebuffer
         per_frame_wifi_settings[1] = 'p';
     else
         per_frame_wifi_settings[1] = 0;
+    if (loop_counter[0] == refresh_every_x_frames && do_full_refresh != 0)
+    {
+        loop_counter[0] = 0;
+        per_frame_wifi_settings[2] = full_refresh_delay;
+    }
+    else
+        per_frame_wifi_settings[2] = '0';
 
     send(socket_desc, per_frame_wifi_settings, 6, 0);
     int ret0 = recv(socket_desc, ready2, 6, 0);
@@ -278,12 +293,12 @@ static int mirroring_task()
         if (ack2[1] == 1)
         {
             mouse_moved = 1;
-           // printf("moved\n");
+            // printf("moved\n");
         }
         else
         {
             mouse_moved = 0;
-         //   printf("not moved\n");
+            //   printf("not moved\n");
         }
         if (ack2[2] == 1)
             pseudo_greyscale_mode = 1;
@@ -312,26 +327,21 @@ static int mirroring_task()
 
         if (source_image_bit_depth == 1)
         {
-            if (loop_counter[0] != refresh_every_x_frames) //asume the screen is white if we are going to refresh
-                memcpy(padded_2bpp_framebuffer_previous, padded_2bpp_framebuffer_current, eink_framebuffer_size);
-            else if (loop_counter[0] == refresh_every_x_frames)
+            if (loop_counter[0] == refresh_every_x_frames)
             {
-                send_refresh_framebuffers(padded_2bpp_framebuffer_current, compressed_eink_framebuffer);
-                memset(padded_2bpp_framebuffer_previous, 85, total_nb_pixels / 4);
+                if (do_full_refresh == 0)
+                    send_refresh_framebuffers(padded_2bpp_framebuffer_current, compressed_eink_framebuffer);
+                memset(padded_2bpp_framebuffer_previous, 85, eink_framebuffer_size * sizeof(unsigned char));
+                //  for (int h = 0; h < eink_framebuffer_size; h++)
+                //     padded_2bpp_framebuffer_previous[h] = 170;
+                // array_to_file(padded_2bpp_framebuffer_previous, 100000, working_dir, "padded_2bpp_framebuffer_previous", 0);
             }
+            else
+                memcpy(padded_2bpp_framebuffer_previous, padded_2bpp_framebuffer_current, eink_framebuffer_size);
 
             generate_eink_framebuffer_v1(source_1bpp, padded_2bpp_framebuffer_current, padded_2bpp_framebuffer_previous, eink_framebuffer);
 
             optimize_rle(eink_framebuffer);
-            // if (improve_dither == 1)
-            // {
-            //     generate_filter_framebuffer(source_8bpp_current, source_8bpp_previous, filter_framebuffer);
-            //     array_to_file(filter_framebuffer, total_nb_pixels / 4, working_dir, "filter_framebuffer", 0);
-
-            //     filter_unwanted_dither(eink_framebuffer, filter_framebuffer, eink_framebuffer_modified, eink_framebuffer_size);
-            //     array_to_file(eink_framebuffer, total_nb_pixels / 4, working_dir, "eink_framebuffer", 0);
-            //     array_to_file(eink_framebuffer_modified, total_nb_pixels / 4, working_dir, "eink_framebuffer_modified", 0);
-            // }
         }
         else if (source_image_bit_depth == 8)
         {
@@ -378,7 +388,7 @@ static int mirroring_task()
         {
             wifi_transfer(eink_framebuffer_swapped, eink_framebuffer_size);
             repeat_counter = 0;
-            // printf("loop_counter %d\n", loop_counter[0]);
+            //    printf("loop_counter %d\n", loop_counter[0]);
             if (total[0] > 85) //don't increase the counter to clear te display if only 85 lines have changed
                 loop_counter[0]++;
         }
@@ -415,13 +425,14 @@ int main(int argc, char *argv[])
     esp32_settings[7] = std::stoi(argv[13]);
     esp32_settings[8] = std::stoi(argv[14]);
     esp32_settings[9] = std::stoi(argv[15]);
-
+    do_full_refresh = std::stoi(argv[16]);
     disable_logging = std::stoi(argv[nb_args - 2]);
     wifi_on = std::stoi(argv[nb_args - 1]);
 
     printf("esp32_ip_address: %s\n", esp32_ip_address);
     printf("display id: %s\n", display_id);
     printf("refresh_every_x_frames: %d\n", refresh_every_x_frames);
+    printf("do_full_refresh: %d\n", do_full_refresh);
 
     printf("framebuffer_cycles: %d\n", esp32_settings[0]);
     printf("rmt_high_time: %d\n", esp32_settings[1]);

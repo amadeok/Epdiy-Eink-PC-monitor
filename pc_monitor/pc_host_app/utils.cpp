@@ -14,7 +14,7 @@ extern unsigned char *decompressed_received;
 extern int compressed_chunk_lengths[8];
 extern int chunk_size;
 
-u_int32_t getTick()
+uint32_t getTick()
 {
     struct timespec ts;
     unsigned theTick = 0U;
