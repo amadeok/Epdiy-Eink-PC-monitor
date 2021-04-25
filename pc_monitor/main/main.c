@@ -28,7 +28,6 @@
 #include "epd_driver.h"
 #include "display_ops.h"
 
-
 #define WIFI_SSID "wifi_ssid"
 #define WIFI_PASS "wifi_password"
 
@@ -310,6 +309,12 @@ static void download_and_extract(const int sock)
       pseudo_greyscale_mode = 1;
     else
       pseudo_greyscale_mode = 0;
+    if (ready1[2] != '0')
+    {
+      printf("clearing with delay %d\n", ready1[2]);
+      epd_clear();
+      vTaskDelay(ready1[2] / portTICK_PERIOD_MS);
+    }
 
     recv(sock, chunk_lenghts, nb_chunks * 4, 0);
 
@@ -323,9 +328,9 @@ static void download_and_extract(const int sock)
       if (a == nb_chunks)
         printf("\n");
 #endif
-  //    printf(" %d ", chunk_lenghts_int[a]);
+      //    printf(" %d ", chunk_lenghts_int[a]);
     }
- //   printf("\n");
+    //   printf("\n");
     long time1 = xTaskGetTickCount();
     recv(sock, line_changed, height_resolution + 2, 0);
     int total = 0;
@@ -579,7 +584,7 @@ CLEAN_UP:
   esp_restart();
   //vTaskDelete(NULL);
   //wifi_task(NULL);
- // xTaskCreatePinnedToCore(&tcp_server_task, "tcp_server_task", 10000, NULL, 5, NULL, 1);
+  // xTaskCreatePinnedToCore(&tcp_server_task, "tcp_server_task", 10000, NULL, 5, NULL, 1);
 }
 
 void init_memory(int extra_bytes)
