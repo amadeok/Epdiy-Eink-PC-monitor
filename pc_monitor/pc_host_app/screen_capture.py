@@ -1,17 +1,3 @@
-import mss
-import os, sys
-import pyautogui
-from PIL import Image, ImageEnhance, ImageOps
-
-
-import time
-import subprocess
-import io, struct
-from random import randint
-import numpy as np
-import threading
-from draw_cursor import generate_cursor, draw_cursor, draw_cursor_1bpp
-from multiprocessing import shared_memory, resource_tracker, Value
 import platform
 
 windows= None; linux = None
@@ -25,6 +11,26 @@ elif windows:
     #import keyboard
     import msvcrt
     import win32pipe, win32file, pywintypes, win32api
+    import ctypes
+   #ctypes.windll.shcore.SetProcessDpiAwareness((1))    
+    ret = ctypes.windll.shcore.SetProcessDpiAwareness(2)
+    if ret == 0: print("Dpi awareness set correctly")
+    else: print("Error settings Dpi awareness")
+
+import mss
+import os, sys
+import pyautogui
+from PIL import Image, ImageEnhance, ImageOps
+
+import time
+import subprocess
+import io, struct
+from random import randint
+import numpy as np
+import threading
+from draw_cursor import generate_cursor, draw_cursor, draw_cursor_1bpp
+from multiprocessing import shared_memory, resource_tracker, Value
+
 
 
 width_res = 0
@@ -544,7 +550,7 @@ with mss.mss() as sct:
     pipe_output = 1
     enable_raw_output = 1
     pseudo_greyscale_mode = display_list[0].pseudo_greyscale_mode
-    save_bmp = 1
+    save_bmp = 0
     check_for_difference_esp = 1
     ###################
     generate_cursor()
@@ -557,7 +563,7 @@ with mss.mss() as sct:
     PID_list.append(pid0)
 
     global shared_buffer
-    if common == 1:
+    if common == 1 or child_process or nb_displays >1:
         try: 
             shm_a = shared_memory.SharedMemory(create=True, size=100, name='screen_capture_shm')
         except: 
@@ -580,6 +586,17 @@ with mss.mss() as sct:
     if disable_wifi:
         wifi_on = 0
     else: wifi_on = 1
+
+    nb_arg = len(sys.argv)
+    for u in range(nb_displays-1):
+        if disable_logging:         
+            P = subprocess.Popen([f'python',  'screen_capture.py',  f'{sys.argv[u+2]}', '-silent', 'child'])
+        else:
+            P = subprocess.Popen([f'python3',  'screen_capture.py',  sys.argv[u+2], 'child'])
+        PID_list.append(P.pid)
+        time.sleep(0.5)
+
+
     if child_process == 0:
 
         if pipe_output and start_process:
@@ -620,14 +637,6 @@ with mss.mss() as sct:
             pid1 = None
 
 
-    nb_arg = len(sys.argv)
-    for u in range(nb_displays-1):
-        if disable_logging:         
-            P = subprocess.Popen([f'python3',  'screen_capture.py',  f'{sys.argv[u+2]}', '-silent', 'child'])
-        else:
-            P = subprocess.Popen([f'python3',  'screen_capture.py',  sys.argv[u+2], 'child'])
-        PID_list.append(P.pid)
-        time.sleep(0.5)
 
     
 
@@ -697,13 +706,14 @@ with mss.mss() as sct:
 
             image_file = convert_to_greyscale_and_enhance(image_file, conf, offset_variables)
             th = conf.grey_to_monochrome_threshold+get_val_from_shm(offset_variables.grey_to_monochrome_threshold, 'i')
+            #print(f"id {display_id} th {th}")
             def fn(x): return 255 if x > th else 0
 
             image_file = image_file.point(fn, mode='1')
 
             #np_image_file = np.asarray(image_file, dtype=np.uint8)
 
-            #eight_bpp_bytearr_list[switcher] = np_image_file
+            #eight_bpp_bytearr_list[switchernamed pipe windows error 2] = np_image_file
 
             image_file = image_file.transpose(Image.FLIP_TOP_BOTTOM) #flip the image so that the first bytes contain the pixel data of the first lines
             if rotation != 0:
