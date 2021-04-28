@@ -7,7 +7,7 @@
 #include <time.h>
 #include <fstream>
 #include <rle_compression.h>
-
+#include <utils.h> 
 #ifdef _WIN32
 #include <windows.h>
 #endif
@@ -96,7 +96,7 @@ DWORD pipe_read(HANDLE handle, void *buffer, DWORD nNumberOfBytesToRead, DWORD l
 {
     DWORD ret;
 #ifdef __linux__
-    lpNumberOfBytesRead = read(HANDLE, buffer, nNumberOfBytesToRead * sizeof(unsigned char));
+    lpNumberOfBytesRead = read(handle, buffer, nNumberOfBytesToRead * sizeof(unsigned char));
 #elif _WIN32
     ReadFile(handle, buffer, sizeof(unsigned char) * nNumberOfBytesToRead, &lpNumberOfBytesRead, NULL);
 #endif
@@ -107,7 +107,7 @@ DWORD pipe_write(HANDLE handle, void *buffer, DWORD nNumberOfBytesToWrite, DWORD
 
 {
 #ifdef __linux__
-    lpNumberOfBytesWritten = write(HANDLE, buffer, nNumberOfBytesToWrite);
+    lpNumberOfBytesWritten = write(handle, buffer, nNumberOfBytesToWrite);
 #elif _WIN32
     WriteFile(handle, buffer, nNumberOfBytesToWrite, &lpNumberOfBytesWritten, NULL);
 #endif

@@ -36,10 +36,6 @@ unsigned char *array_with_zeros, *draw_white_bytes, *draw_black_bytes;
 
 char *line_changed; //array containing 1 or 0 depending on whether the corresponding line on the screen has changed
 
-#if !defined(_WIN32)
-#define SOCKET int
-#define HANDLE int
-#endif
 SOCKET socket_desc;
 #if defined(_WIN32)
 #define ISVALIDSOCKET(s) ((s) != INVALID_SOCKET)
@@ -534,7 +530,7 @@ int main(int argc, char *argv[])
     {
         printf("Failed. Error Code : %d", WSAGetLastError());
         return 1;
-    }
+    }d
     printf("WSAD Initialised.\n");
 
 #endif
@@ -546,21 +542,14 @@ int main(int argc, char *argv[])
     {
         printf("Could not create socket\n");
     }
+    #ifdef _WIN32
     int err = WSAGetLastError();
     if (!ISVALIDSOCKET(socket_desc))
     {
         fprintf(stderr, "socket() failed! %d\n", WSAGetLastError());
     }
-#ifdef __linux__ 
-    int yes = 0; // 1 - on, 0 - off
-    int result = setsockopt(socket_desc,
-                            IPPROTO_TCP,
-                            TCP_NODELAY,
-                            (char *)&yes,
-                            sizeof(int));
-    if (result < 0)
-        printf("error setting socket options\n");
-#endif
+    #endif
+
     int yes = 0; // 1 - on, 0 - off
     int result = setsockopt(socket_desc,
                             IPPROTO_TCP,
