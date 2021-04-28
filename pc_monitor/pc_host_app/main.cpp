@@ -530,7 +530,7 @@ int main(int argc, char *argv[])
     {
         printf("Failed. Error Code : %d", WSAGetLastError());
         return 1;
-    }d
+    }
     printf("WSAD Initialised.\n");
 
 #endif
