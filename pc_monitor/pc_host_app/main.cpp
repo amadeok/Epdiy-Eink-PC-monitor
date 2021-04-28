@@ -551,7 +551,7 @@ int main(int argc, char *argv[])
     {
         fprintf(stderr, "socket() failed! %d\n", WSAGetLastError());
     }
-#ifdef __linux__
+#ifdef __linux__ 
     int yes = 0; // 1 - on, 0 - off
     int result = setsockopt(socket_desc,
                             IPPROTO_TCP,
@@ -561,7 +561,14 @@ int main(int argc, char *argv[])
     if (result < 0)
         printf("error setting socket options\n");
 #endif
-
+    int yes = 0; // 1 - on, 0 - off
+    int result = setsockopt(socket_desc,
+                            IPPROTO_TCP,
+                            TCP_NODELAY,
+                            (char *)&yes,
+                            sizeof(int));
+    if (result < 0)
+        printf("error setting socket options\n");
     server.sin_addr.s_addr = inet_addr(esp32_ip_address);
     server.sin_family = AF_INET;
     server.sin_port = htons(3333);

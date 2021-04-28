@@ -732,6 +732,9 @@ with mss.mss() as sct:
             elif pipe_bit_depth == 8:
                 byte_frag = pipe_output_f(np_image_file, np_image_file, mouse_moved)  # 1bpp->raw_files[0]
         if disable_logging == '0':
-            print(f"Display ID: {display_id}, capture took {int(((time.time() - t0)*1000))}ms")
+            took = int(((time.time() - t0)*1000))
+            if took > 1000:
+                print("mroe than")
+            print(f"Display ID: {display_id}, capture took {took}ms")
         time.sleep(sleep_time/1000)
 
