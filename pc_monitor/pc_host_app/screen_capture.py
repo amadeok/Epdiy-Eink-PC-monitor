@@ -4,7 +4,6 @@ windows= None; linux = None
 if platform.system() == 'Linux': linux = True; 
 elif platform.system() == 'Windows': windows = True;
 else: print("Unknown platform")
-import os, sys
 if linux:
     import termios, tty
     tty.setcbreak(sys.stdin)
@@ -19,6 +18,7 @@ elif windows:
     else: print("Error settings Dpi awareness")
 
 import mss
+import os, sys
 import pyautogui
 from PIL import Image, ImageEnhance, ImageOps
 
@@ -651,10 +651,12 @@ with mss.mss() as sct:
         output_pipe = f"epdiy_pc_monitor_a_{display_id}"
         input_pipe = f"epdiy_pc_monitor_b_{display_id}"
         if linux:
+            output_pipe = f"/tmp/epdiy_pc_monitor_a_{display_id}"
+            input_pipe = f"/tmp/epdiy_pc_monitor_b_{display_id}"
             create_pipes(output_pipe, input_pipe, display_id)
             print("Opening pipes...")
-            fd1 = os.open('/tmp/' + input_pipe, os.O_RDONLY)
-            fd0 = os.open('/tmp/' + output_pipe, os.O_WRONLY)
+            fd1 = os.open(input_pipe, os.O_RDONLY)
+            fd0 = os.open(output_pipe, os.O_WRONLY)
             print("Pipes opened")
         elif windows:
             fd1, fd0 = create_pipes(output_pipe, input_pipe, display_id)

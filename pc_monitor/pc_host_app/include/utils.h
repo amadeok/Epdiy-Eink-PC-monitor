@@ -3,8 +3,7 @@
 uint32_t getTick();
 
 #if !defined(_WIN32)
-#define SOCKET int
-#define HANDLE int32_t
+#define HANDLE int
 #define DWORD unsigned long
 #define LPDWORD *DWORD
 #endif
