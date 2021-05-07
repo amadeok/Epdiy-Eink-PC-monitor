@@ -1,7 +1,15 @@
-import pyautogui, time, io
+import pyautogui, time, io, platform
 from PIL import Image
 
-pos2 = pyautogui.position() 
+windows= None; linux = None
+if platform.system() == 'Linux': linux = True; 
+elif platform.system() == 'Windows': windows = True;
+if windows:
+    import win32gui
+    pos2 = win32gui.GetCursorPos()
+
+elif linux:
+    pos2 = pyautogui.position() 
 
 def process_string(current_byte_string):
     inverted_output0= ''
@@ -26,6 +34,11 @@ def process_string(current_byte_string):
 
 #def init_cursor(conf):
 
+class cursor_coor:
+    def __init__(self):
+        self.x = 0
+        self.y = 0
+pos2 = cursor_coor()
 
 def draw_cursor_1bpp(conf, byte_string_raw):
 
@@ -37,15 +50,22 @@ def draw_cursor_1bpp(conf, byte_string_raw):
     width_res2 = conf.width_res2
     height_res2 = conf.height_res2
 
-    global pos2
+    global pos2; global cursor
     previous_pos = pos2
-    pos2 = pyautogui.position()
+
+    p = pyautogui.position()
+    if not linux:
+        pos2 = pyautogui.position()
+    elif windows: 
+        pos = win32gui.GetCursorPos()
+        pos2.x = pos[0]; pos2.y = pos[1]
+    
     if pos2.x >= x_offset and pos2.x <= width_res2 and pos2.y >= y_offset and pos2.y <= height_res2-22:
         t0 = time.time()
         x = int((pos2.x - x_offset) / 8)
         y = int((pos2.y - y_offset +1))
+        #print(f"inside : pos2.x  {pos2.x } pos2.y  {pos2.y }, y {y}, x {x},  ")
 
-        #print(f"x {x}, pos2.x  {pos2.x }")
 
         if conf.rotation == 180:
             x = width_res-x
@@ -141,35 +161,6 @@ def draw_cursor_1bpp(conf, byte_string_raw):
             j+=1
             byte_string_raw[line_coor+(j*-width_res//8):line_coor+4+(j*-width_res//8)] =  fin
 
-
-        # start = width_res//8+62
-        # end = width_res//8+62
-        # path = "/home/amadeok/epdiy-working/examples/pc_monitor/pc_host_app/"
-        # header_path = "header1200x825" # header936x704 , 936x88header
-        # with open(f"{path}{header_path}.bmp", "rb") as h:
-        #     header = h.read()
-        # temp_byte_arr = b''
-        # for x in range(pad_bytes):
-        #     temp_byte_arr+= b'\x00'
-        # b2 = byte_string_raw[:]
-        # for x in range(height_res): 
-        #     # 936x702 -> 84299 to 84302;  
-        #     b2[start:end] = temp_byte_arr
-        #     #print(byte_string[0:end+30])
-        #     start+=line_with_pad  # (936 + 24) / 8
-        #     end+=line_with_pad
-        #     #if byte_string[start:end] != b'\x00\x00\x00':
-        #     #   print("warning")
-        # b2[0:0] = header
-        # with open(f"{path}cursortest.bmp", "wb") as out2:
-        #     out2.write(b2)
-        #     output = io.BytesIO()
-        # image_file = Image.open(f"{path}cursortest.bmp") # for testing
-        # if conf.rotation != 0:
-        #     image_file   = image_file.rotate(180,  expand=True)
-        # image_file = image_file.transpose(Image.FLIP_TOP_BOTTOM) 
-        # image_file.save(f"{path}cursortest.bmp")
-        # byte_string_raw2 = output.getvalue()z
         if previous_pos.x == pos2.x and previous_pos.y == pos2.y:
             #print(f" not moved px {previous_pos.x}, cx {pos2.x}, py {previous_pos.y}, cy {pos2.y}")
             return 0
@@ -177,6 +168,7 @@ def draw_cursor_1bpp(conf, byte_string_raw):
             #print(f" moved ::  px {previous_pos.x}, cx {pos2.x}, py {previous_pos.y}, cy {pos2.y}")
             return 1
     else:
+        #print(f"outside : pos2.x  {pos2.x } pos2.y  {pos2.y }")
         return 0
 
 def generate_cursor():

@@ -1,32 +1,29 @@
 #include <2bitLUTforC_inv.h>
 #include <string.h>
 #include <utils.h>
-#include <stdio.h>
 
-extern int total_nb_pixels, refresh_every_x_frames;
+extern int total_nb_pixels, refres_every_x_frames;
 extern char working_dir[256];
-
+;
 int loop_counter0 = 1, loop_counter1 = 0;
-extern uint32_t loop_counter[1];
 
-void *generate_eink_framebuffer_v1(unsigned char *source_1bpp, unsigned char *padded_2bpp_framebuffer_current, unsigned char *padded_2bpp_framebuffer_previous, unsigned char *eink_framebuffer)
+void *generate_eink_framebuffer_v1(unsigned char *source_1bpp, char *padded_2bpp_framebuffer_current, char *padded_2bpp_framebuffer_previous, char *eink_framebuffer)
 { //generate eink framebuffer from 1bpp monochrome capture
     int counter = 0;
 
     // long t = getTick();
-    for (int g = 0; g < (total_nb_pixels / 4) - 1; g++)
+    for (int g = 0; g < total_nb_pixels / 4; g++)
     {
         memcpy(padded_2bpp_framebuffer_current + counter, two_bit_LUT + (source_1bpp[g] * 2), 2);
         counter += 2;
-        eink_framebuffer[g] = padded_2bpp_framebuffer_previous[g] ^ (padded_2bpp_framebuffer_current[g] << 1);
-
+        eink_framebuffer[g] = padded_2bpp_framebuffer_previous[g] ^= (padded_2bpp_framebuffer_current[g] << 1);
     }
     //array_to_file(eink_framebuffer, total_nb_pixels / 8, working_dir, "eink_framebuffer", 0);
     //   printf("generate_eink_framebuffer_v1 took: %d\n", getTick() - t);
     // array_to_file(padded_2bpp_framebuffer_current, 10000, working_dir, "padded_2bpp_framebuffer_current", 0);
 }
 
-void generate_eink_framebuffer_v2(unsigned char *source_8bpp_current, unsigned char *source_8bpp_previous, unsigned char *source_8bpp_modified_previous, unsigned char *eink_framebuffer)
+void generate_eink_framebuffer_v2(unsigned char *source_8bpp_current, unsigned char *source_8bpp_previous, unsigned char *source_8bpp_modified_previous, char *eink_framebuffer)
 { //generate eink framebuffer from 8bpp monochrome capture, slower than v1
     memset(eink_framebuffer, 0, total_nb_pixels / 4);
     unsigned char temp_mask = 0;
@@ -52,12 +49,12 @@ void generate_eink_framebuffer_v2(unsigned char *source_8bpp_current, unsigned c
     //     array_to_file(eink_framebuffer, 230400, working_dir, "eink_framebuffer", 0);
 }
 
-void generate_filter_framebuffer(unsigned char *source_8bpp_current, unsigned char *source_8bpp_previous, unsigned char *filter_framebuffer)
+void generate_filter_framebuffer(unsigned char *source_8bpp_current, unsigned char *source_8bpp_previous, char *filter_framebuffer)
 {
 
     array_to_file(source_8bpp_current, total_nb_pixels / 4, working_dir, "source_8bpp_current", 0);
 
-    array_to_file(source_8bpp_previous, total_nb_pixels / 4, working_dir, "source_8bpp_previous", 0);
+   array_to_file(source_8bpp_previous, total_nb_pixels / 4, working_dir, "source_8bpp_previous", 0);
 
     memset(filter_framebuffer, 0, total_nb_pixels / 4);
     unsigned char temp_mask = 0;
@@ -82,7 +79,7 @@ void generate_filter_framebuffer(unsigned char *source_8bpp_current, unsigned ch
     }
 }
 
-void filter_unwanted_dither(unsigned char *eink_framebuffer, unsigned char *filter_framebuffer, unsigned char *eink_framebuffer_modified, int eink_framebuffer_size)
+void filter_unwanted_dither(char *eink_framebuffer, char *filter_framebuffer, char *eink_framebuffer_modified, int eink_framebuffer_size)
 {
     for (int h = 0; h < eink_framebuffer_size; h++)
     {
