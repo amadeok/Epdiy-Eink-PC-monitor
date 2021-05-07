@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.05] - 07-05-2021
+-added support to use in Windows 10
+
 ## [0.0421] - 25-04-2021
 -added option to do full refresh with epd_clear() instead of a quick one
 
