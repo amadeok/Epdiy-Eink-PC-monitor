@@ -5,7 +5,7 @@ if platform.system() == 'Linux': linux = True;
 elif platform.system() == 'Windows': windows = True;
 else: print("Unknown platform")
 if linux:
-    import termios, tty
+    import termios, tty,sys
     tty.setcbreak(sys.stdin)
 elif windows:
     #import keyboard
@@ -66,8 +66,8 @@ def create_pipes(output_pipe, input_pipe, id):
     pipe_a = "epdiy_pc_monitor_a_"
     pipe_b  = "epdiy_pc_monitor_b_"
     if linux:
-        output_pipe = '/tmp/' + output_pipe
-        input_pipe = '/tmp/' + input_pipe
+        output_pipe = output_pipe
+        input_pipe = input_pipe
 
         if os.path.exists(output_pipe) == False:    
             os.mkfifo(output_pipe)
