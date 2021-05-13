@@ -5,7 +5,8 @@ uint32_t getTick();
 #if !defined(_WIN32)
 #define HANDLE int
 #define DWORD unsigned long
-#define LPDWORD *DWORD
+#define LPDWORD *DWORD.
+#define SOCKET int32_t
 #endif
 #ifdef _WIN32
 #include <windows.h>
