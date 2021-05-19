@@ -462,7 +462,6 @@ int main(int argc, char *argv[])
     do_full_refresh = std::stoi(argv[16]);
 
     disable_logging = std::stoi(argv[nb_args - 2]);
-    wifi_on = std::stoi(argv[nb_args - 1]);
 
     printf("esp32_ip_address: %s\n", esp32_ip_address);
     printf("display id: %s\n", display_id);
@@ -480,6 +479,9 @@ int main(int argc, char *argv[])
     printf("pseudo_greyscale_mode: %d\n", esp32_settings[7]);
     printf("selective_compression: %d\n", selective_compression = esp32_settings[8]);
     printf("nb_chunks: %d\n", nb_chunks = esp32_settings[9]);
+    
+        wifi_on = std::stoi(argv[nb_args - 1]);
+
     //  printf("improve_dither: %d\n", improve_dither = std::stoi(argv[15]));
 
     if (disable_logging == 1)
