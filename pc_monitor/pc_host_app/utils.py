@@ -397,7 +397,6 @@ class dither_setup:
             print("pixel data must be 1d for dither")
             return -1
         f_meth = "makeDither" + dither_method
-        print("########### ", f_meth)
         method = self.indirect(f_meth)
        # method = self.cdll.makeDitherSierraLite #self.indirect(dither_method)
         method(v1, ctx.width, ctx.height)
@@ -469,22 +468,22 @@ def check_key_presses(PID_list, conf):
         elif windows:
             x = msvcrt.getch().decode('UTF-8')
             
-            if x == 'q' or x == 'Q':
-                print("Exiting")
-                if ctx.has_childs == 1:
-                    ctx.shared_buffer[0] = 101
-                exiting = 101
-                time.sleep(5)
-                try:
-                    for v in range(len(PID_list)-1, 0, -1):
-                        if PID_list[v] != None:
-                            os.kill(PID_list[v], 9)
-                    os.kill(PID_list[0], 9)
-                except: pass
+        if x == 'q' or x == 'Q':
+            print("Exiting")
+            if ctx.has_childs == 1:
+                ctx.shared_buffer[0] = 101
+            exiting = 101
+            time.sleep(5)
+            try:
+                for v in range(len(PID_list)-1, 0, -1):
+                    if PID_list[v] != None:
+                        os.kill(PID_list[v], 9)
+                os.kill(PID_list[0], 9)
+            except: pass
 
 
-            else:
-                ret0 = s.indirect(x) 
+        else:
+            ret0 = s.indirect(x) 
 
         
         try: 
