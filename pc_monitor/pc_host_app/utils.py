@@ -387,14 +387,18 @@ class dither_setup:
     #def __init__(self, ctx):
         
     def apply(self, pixel_data, dither_method):
-
+        if dither_method == 'monochrome' or dither_method == 'PIL_dither':
+            print("Error?")
+            dither_method = "FS"
         if isinstance(pixel_data, np.ndarray) and pixel_data.dtype == np.uint8 and len(pixel_data.shape)==1:
             v = pixel_data.ctypes.data
             v1= ctypes.c_uint64(v)
         else: 
             print("pixel data must be 1d for dither")
             return -1
-        method = self.indirect("makeDither" + dither_method)
+        f_meth = "makeDither" + dither_method
+        print("########### ", f_meth)
+        method = self.indirect(f_meth)
        # method = self.cdll.makeDitherSierraLite #self.indirect(dither_method)
         method(v1, ctx.width, ctx.height)
 

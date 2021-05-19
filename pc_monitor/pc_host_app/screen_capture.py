@@ -122,7 +122,7 @@ def main_task(ctx):
 
                 image_file = image_file.point(fn, mode='1')
 
-            else: #other dithering
+            elif mode > 0 and mode < 9: #other dithering
                 image_file = convert_to_greyscale_and_enhance(image_file, ctx, ctx.offset_variables)
 
                 np_arr = np.asarray(image_file)
@@ -139,7 +139,8 @@ def main_task(ctx):
 
                 image_file = image_file.point(fn, mode='1')
                 #print(t()-t0)
-
+            else:
+                print("error?")
             image_file = image_file.transpose(Image.FLIP_TOP_BOTTOM) #flip the image so that the first bytes contain the pixel data of the first lines
             if ctx.rotation != 0:
                 image_file   = image_file.rotate(ctx.rotation,  expand=True)
