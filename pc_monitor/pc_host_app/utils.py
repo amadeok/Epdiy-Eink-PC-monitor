@@ -96,6 +96,16 @@ class args_eval:
 class display_settings(object):
     def get_dith(self):
         pass
+    def check_resize(self):
+
+        if isinstance(self.resize_w, int) and isinstance(self.resize_h, int):
+
+            if self.width / self.height != self.resize_w / self.resize_h:
+                print(self.log, "Invalid resize setting")
+                sys.exit()
+        else: print(self.log, "Not resizing"); return -1
+        print(self.log, "Resize resolution: ", self.resize_w, self.resize_h)
+
     def __init__(self, names, args, configuration_file):
         def get_val(val):
             n = 0
@@ -139,6 +149,9 @@ class display_settings(object):
         self.log = f"Python ID {self.id}: " 
         self.complete_output_file = f'{working_dir}/image_id_{self.id}.bmp'
         self.settings_dither = 0
+
+        #self.check_resize()
+
         if self.a.disable_wifi == 1: self.wifi_on = 0;
         else: self.wifi_on = 1
         setup_shared_memory(self)
