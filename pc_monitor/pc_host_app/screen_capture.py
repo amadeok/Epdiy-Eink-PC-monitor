@@ -129,7 +129,10 @@ def main_task(ctx):
 
                 np_arr = np.ravel(np_arr)
                 mode = get_mode(get_val_from_shm(ctx.offset_variables.mode, 'i'))
-                dith.apply(np_arr, mode)
+                if dith.apply(np_arr, mode) == -1:
+                    print("error dither type")
+                    byte_frag = pipe_output_f(raw_files, None, mouse_moved, fd1, fd0)  # 1bpp->raw_files[0]
+                    continue
 
                 image_file = Image.frombytes('RGB', sct_img.size, np_arr)
                 #t0 = t()

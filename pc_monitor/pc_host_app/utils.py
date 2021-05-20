@@ -138,7 +138,7 @@ class display_settings(object):
         self.configuration_file = configuration_file
         self.log = f"Python ID {self.id}: " 
         self.complete_output_file = f'{working_dir}/image_id_{self.id}.bmp'
-
+        self.settings_dither = 0
         if self.a.disable_wifi == 1: self.wifi_on = 0;
         else: self.wifi_on = 1
         setup_shared_memory(self)
@@ -163,7 +163,7 @@ def read_dither_method(ctx):
     for elem in new_conf:
         if elem[0] == 'mode:':
             if elem[1] in modes.keys():
-                print(f"{ctx.log} Mode is: ", elem[1])
+                #print(f"{ctx.log} Mode is: ", elem[1])
                 return  elem[1]
 
             elif prev in modes.keys():
@@ -387,9 +387,9 @@ class dither_setup:
     #def __init__(self, ctx):
         
     def apply(self, pixel_data, dither_method):
+
         if dither_method == 'monochrome' or dither_method == 'PIL_dither':
-            print("Error?")
-            dither_method = "FS"
+            return -1
         if isinstance(pixel_data, np.ndarray) and pixel_data.dtype == np.uint8 and len(pixel_data.shape)==1:
             v = pixel_data.ctypes.data
             v1= ctypes.c_uint64(v)
@@ -401,7 +401,7 @@ class dither_setup:
        # method = self.cdll.makeDitherSierraLite #self.indirect(dither_method)
         method(v1, ctx.width, ctx.height)
 
-        return pixel_data
+        return 1 
 
 
 
@@ -411,11 +411,12 @@ def check_key_presses(PID_list, conf):
     if linux:
         orig_settings = termios.tcgetattr(sys.stdin)
     class Switcher():
+        sl = 0.0
+
         def indirect(self,i):
             method_name='fun_'+str(i)
             method=getattr(self,method_name,lambda :'Invalid')
             return method()
-
         def fun_q(self):
             print("Exiting")
             if ctx.has_childs == 1:
@@ -429,15 +430,29 @@ def check_key_presses(PID_list, conf):
                 os.kill(PID_list[0], 9)
             except: pass    
         def fun_m(self):
+            ctx.settings_dither = 1
+
             ctx.mode = "monochrome"
             write_to_shared_mem(conf.mode, 0, 'a');  print("Monochrome mode is on ", get_val_from_shm(conf.mode, 'i'))
+            time.sleep(self.sl)
+            ctx.settings_dither = 0
+
         def fun_p(self):
+            ctx.settings_dither = 1
             ctx.mode = "PIL_dither"
             write_to_shared_mem(conf.mode, 9, 'a'); print("Pil dithering mode is on ", get_val_from_shm(conf.mode, 'i'))
+
+            time.sleep(self.sl)
+            ctx.settings_dither = 0
+
         def fun_d(self):
+            ctx.settings_dither = 1
             ctx.mode = read_dither_method(ctx)
             write_to_shared_mem(conf.mode, modes.get(ctx.mode), 'a')
             print(f"Dithering mode {ctx.mode} is on {get_val_from_shm(conf.mode, 'i')}" )    
+            time.sleep(self.sl)
+            ctx.settings_dither = 0
+
         def fun_i(self):
             if get_val_from_shm(conf.invert, 'i') == 1:
                 write_to_shared_mem(conf.invert, -1, 'i');  print("Invert is off ", get_val_from_shm(conf.invert, 'i'))
