@@ -82,6 +82,8 @@ if ctx.a.child_process == 0:
 def main_task(ctx):
     if ctx.a.child_process == 0:
         write_to_shared_mem(ctx.offset_variables.mode, modes.get(ctx.mode), 'a')
+        if ctx.invert > 0:
+            write_to_shared_mem(ctx.offset_variables.invert_threshold, ctx.invert, 'a')
 
     if pipe_output:
         fd1, fd0 = open_pipes(ctx)
@@ -128,25 +130,35 @@ def main_task(ctx):
                 np_arr = np.asarray(image_file)
 
                 np_arr = np.ravel(np_arr)
+
+
                 mode = get_mode(get_val_from_shm(ctx.offset_variables.mode, 'i'))
                 if dith.apply(np_arr, mode) == -1:
                     print("error dither type")
                     byte_frag = pipe_output_f(raw_files, None, mouse_moved, fd1, fd0)  # 1bpp->raw_files[0]
                     continue
-
+                
                 image_file = Image.frombytes('RGB', sct_img.size, np_arr)
                 #t0 = t()
 
                 image_file = image_file.convert('L')
+
+                invert =  get_val_from_shm(ctx.offset_variables.invert, 'i')
+
+                if invert > -1:
+                    if invert == 0: image_file = ImageOps.invert(image_file)
+                    else:   image_file = smart_invert(image_file)
+
                 def fn(x): return x
 
                 image_file = image_file.point(fn, mode='1')
+                
                 #print(t()-t0)
             else:
                 print("error?")
-            image_file = image_file.transpose(Image.FLIP_TOP_BOTTOM) #flip the image so that the first bytes contain the pixel data of the first lines
-            if ctx.rotation != 0:
-                image_file   = image_file.rotate(ctx.rotation,  expand=True)
+            """             image_file = image_file.transpose(Image.FLIP_TOP_BOTTOM) #flip the image so that the first bytes contain the pixel data of the first lines
+                        if ctx.rotation != 0:
+                            image_file   = image_file.rotate(ctx.rotation,  expand=True) """
 
             if enable_raw_output: 
                 raw_files = get_raw_pixels(

@@ -1,5 +1,7 @@
 import platform, ctypes
 
+from numpy.lib.type_check import imag
+
 windows= None; linux = None
 if platform.system() == 'Linux': linux = True; 
 elif platform.system() == 'Windows': windows = True;
@@ -37,12 +39,20 @@ save_chunck_files = 0
 pipe_bit_depth = 1
 pipe_output = 1
 enable_raw_output = 1
-save_bmp = 1
+save_bmp = 0
 check_for_difference_esp = 1
 working_dir = os.getcwd()
 raw_output_file = f"{working_dir}/image_mode_raw"
+t_counter = 0;t0 = 0
 
 def t():
+    global t_counter;global t0
+    t_counter+=1
+    if t_counter == 1:
+        t0 = time.time()
+    elif t_counter == 2:
+        t_counter = 0
+        print(time.time()-t0)
     return time.time()
 
 modes =  {
@@ -467,10 +477,11 @@ def check_key_presses(PID_list, conf):
             ctx.settings_dither = 0
 
         def fun_i(self):
-            if get_val_from_shm(conf.invert, 'i') == 1:
-                write_to_shared_mem(conf.invert, -1, 'i');  print("Invert is off ", get_val_from_shm(conf.invert, 'i'))
-            else:
-                write_to_shared_mem(conf.invert, +1, 'i'),  print("Invert is on ", get_val_from_shm(conf.invert, 'i'))
+            inv = get_val_from_shm(conf.invert, 'i')
+            if inv != -1:
+                write_to_shared_mem(conf.invert, -1, 'a');  print("Invert is off ", get_val_from_shm(conf.invert, 'i'))
+            elif inv != 0:
+                write_to_shared_mem(conf.invert, 0, 'a'),  print("Invert is on ", get_val_from_shm(conf.invert, 'i'))
      
         def fun_1(self): write_to_shared_mem(conf.color, -0.1, 'f')
         def fun_2(self): write_to_shared_mem(conf.color, +0.1, 'f')
@@ -482,6 +493,14 @@ def check_key_presses(PID_list, conf):
         def fun_8(self): write_to_shared_mem(conf.sharpness, +0.1, 'f')
         def fun_9(self): write_to_shared_mem(conf.grey_to_monochrome_threshold, -10, 'i')
         def fun_0(self): write_to_shared_mem(conf.grey_to_monochrome_threshold, +10, 'i')
+        def fun_y(self):
+            write_to_shared_mem(conf.invert, 1, 'a'); 
+            write_to_shared_mem(conf.invert_threshold, -10, 'i'); 
+            print("Smart invert is on with threshold ", get_val_from_shm(conf.invert_threshold, 'i') )
+        def fun_u(self):  
+            write_to_shared_mem(conf.invert, 1, 'a'); 
+            write_to_shared_mem(conf.invert_threshold, +10, 'i');
+            print("Smart invert is on with threshold ", get_val_from_shm(conf.invert_threshold, 'i'))
         def fun_b(self):
             if get_val_from_shm(conf.enhance_before_greyscale, 'i') == 1:
                 write_to_shared_mem(conf.enhance_before_greyscale, -1, 'i'); print("enhance_before_greyscale is off ", get_val_from_shm(conf.enhance_before_greyscale, 'i'))
@@ -525,6 +544,15 @@ def check_key_presses(PID_list, conf):
         termios.tcsetattr(sys.stdin, termios.TCSADRAIN, orig_settings)
 
 
+def smart_invert(image_file):
+    np_arr = np.asarray(image_file)
+    n = np.mean(np_arr)
+   # inv = 0
+    if n < get_val_from_shm(ctx.offset_variables.invert_threshold, 'i'):
+        image_file = ImageOps.invert(image_file)
+        #inv = 1
+    #print("###", n, inv)
+    return image_file
 
 
 
@@ -552,6 +580,7 @@ class shared_var:
         self.grey_to_monochrome_threshold =   offset_object(34, 0,'i')
         self.invert =   offset_object(38, 0,'i')
 
+        self.invert_threshold =   offset_object(42, 0,'i')
 
 
 
@@ -588,17 +617,20 @@ def apply_enhancements(image_file, conf, offsets):
 
 
 def convert_to_greyscale_and_enhance(image_file, conf, offset_variables):
-    if get_val_from_shm(offset_variables.enhance_before_greyscale, 'i'):
+    enhance_before_greyscale = get_val_from_shm(offset_variables.enhance_before_greyscale, 'i')
+    val = get_val_from_shm(offset_variables.mode, 'i')
+
+    if enhance_before_greyscale:
         image_file = apply_enhancements(image_file, conf, offset_variables)
         
-    val = get_val_from_shm(offset_variables.mode, 'i')
     if val == 0 or val == 9:
         image_file = image_file.convert('L')
+        invert =  get_val_from_shm(offset_variables.invert, 'i')
+        if invert > -1:
+            if invert == 0: image_file = ImageOps.invert(image_file)
+            else:   image_file = smart_invert(image_file)
 
-    if get_val_from_shm(offset_variables.invert, 'i')  == 1:
-        image_file = ImageOps.invert(image_file)
-    
-    if get_val_from_shm(offset_variables.enhance_before_greyscale, 'i')  == 0:
+    if enhance_before_greyscale  == 0:
         image_file = apply_enhancements(image_file, conf, offset_variables)
     return image_file
 
