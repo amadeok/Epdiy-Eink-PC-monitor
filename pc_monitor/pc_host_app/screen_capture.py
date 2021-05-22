@@ -10,7 +10,7 @@ import subprocess
 import io, struct
 from random import randint
 import numpy as np
-import threading
+import threading, cv2
 from draw_cursor import generate_cursor, draw_cursor, draw_cursor_1bpp
 from multiprocessing import shared_memory, resource_tracker, Value
 from collections import namedtuple
@@ -26,7 +26,12 @@ pid0 = os.getpid()
 PID_list.append(pid0)
 
 
+f = open("C:\\Users\\amade\\dither\\imgb20", 'rb')
+b_ori = f.read()
+b_ori_np = np.frombuffer(b_ori, dtype=np.uint8)
 
+pili = Image.frombytes('L', (1200,825), b_ori)
+pili.save("C:\\Users\\amade\\dither\\pili.bmp")
 
 for u in range(nb_displays-1):
     if ctx.a.disable_logging:         
@@ -84,6 +89,7 @@ def main_task(ctx):
         write_to_shared_mem(ctx.offset_variables.mode, modes.get(ctx.mode), 'a')
         if ctx.invert > 0:
             write_to_shared_mem(ctx.offset_variables.invert_threshold, ctx.invert, 'a')
+            write_to_shared_mem(ctx.offset_variables.invert, ctx.invert, 'a')
 
     if pipe_output:
         fd1, fd0 = open_pipes(ctx)
@@ -117,9 +123,10 @@ def main_task(ctx):
 
             elif mode == 0: #Monochrome
 
+
                 image_file = convert_to_greyscale_and_enhance(image_file, ctx, ctx.offset_variables)
                 th = ctx.grey_monochrome_threshold+get_val_from_shm(ctx.offset_variables.grey_to_monochrome_threshold, 'i')
-
+                
                 def fn(x): return 255 if x > th else 0
 
                 image_file = image_file.point(fn, mode='1')

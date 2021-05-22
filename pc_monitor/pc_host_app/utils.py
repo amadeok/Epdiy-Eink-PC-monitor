@@ -124,9 +124,15 @@ class display_settings(object):
             if n> 1:
                 return val
             elif n == 1: return float(val)
+            elif '-' in val:
+                val = val.lstrip("-")
+                val = int(val)- int(val)*2
+                return val
             elif val.isdigit():
-                 return int(val)
+                return int(val)
             else: return val
+
+            #else: return val
         try:
             # Support space-separated name strings
             names = names.split()
@@ -402,12 +408,15 @@ def get_val_from_shm(obj, type):
 class dither_setup:
     path = os.path.dirname(__file__)
     cdll = ctypes.CDLL(os.path.join(path, "dither_.dll" if sys.platform.startswith("win") else "dither_.so"))
+
     def indirect(self,i):
         method_name= str(i)
         method=getattr(self.cdll,method_name,lambda :'Invalid')
         return method
 
-    #def __init__(self, ctx):
+    def __init__(self):
+        self.pixel_invert = np.full((ctx.width, ctx.height), 0, dtype=np.bool8)
+
         
     def apply(self, pixel_data, dither_method):
 
@@ -425,8 +434,16 @@ class dither_setup:
         method(v1, ctx.width, ctx.height)
 
         return 1 
-
-
+    def selective_invert_(self, pixels, chunk_w, chunk_h, thres):
+        if isinstance(pixels, np.ndarray) and pixels.dtype == np.uint8 and len(pixels.shape)==1:
+            ptr0 = pixels.ctypes.data
+            ptr0= ctypes.c_uint64(ptr0)
+            ptr1 = self.pixel_invert.ctypes.data
+            ptr1= ctypes.c_uint64(ptr1)
+        else: 
+            print("pixel data must be 1d for dither")
+            return -1
+        self.cdll.selective_invert(ptr0, ptr1, ctx.width,ctx.height, chunk_w, chunk_h, thres)
 
             
 def check_key_presses(PID_list, conf):
@@ -483,6 +500,13 @@ def check_key_presses(PID_list, conf):
             elif inv != 0:
                 write_to_shared_mem(conf.invert, 0, 'a'),  print("Invert is on ", get_val_from_shm(conf.invert, 'i'))
      
+        def fun_f(self):
+            fill_blacks = get_val_from_shm(conf.fill_blacks, 'i')
+            if fill_blacks != -1:
+                write_to_shared_mem(conf.fill_blacks, -1, 'a');  print("fill_blacks is off ", get_val_from_shm(conf.fill_blacks, 'i'))
+            elif fill_blacks != 0:
+                write_to_shared_mem(conf.fill_blacks, 0, 'a'),  print("fill_blacks is on ", get_val_from_shm(conf.fill_blacks, 'i'))
+
         def fun_1(self): write_to_shared_mem(conf.color, -0.1, 'f')
         def fun_2(self): write_to_shared_mem(conf.color, +0.1, 'f')
         def fun_3(self): write_to_shared_mem(conf.contrast, -0.1, 'f')
@@ -542,18 +566,41 @@ def check_key_presses(PID_list, conf):
         
     if linux:
         termios.tcsetattr(sys.stdin, termios.TCSADRAIN, orig_settings)
+def select_inv(image_file, chunk_w, chunk_h, thres_perc):
+    area = chunk_w * chunk_h
+    quotient = thres_perc /100
+    thres = int(quotient*area)
 
+    np_arr = np.asarray(image_file)
+    np_arr = np.ravel(np_arr)
+
+    dith.selective_invert_(np_arr,  chunk_w, chunk_h, thres)
+    inv2 = 1
+    image_file = Image.frombytes('L', image_file.size, np_arr)
+
+    #inv = 1
+    return image_file
 
 def smart_invert(image_file):
     np_arr = np.asarray(image_file)
     n = np.mean(np_arr)
-   # inv = 0
+    inv = 0; inv2 = 0
     if n < get_val_from_shm(ctx.offset_variables.invert_threshold, 'i'):
         image_file = ImageOps.invert(image_file)
-        #inv = 1
-    #print("###", n, inv)
+        inv = 1
+    if n > 1 and n < 174 and  get_val_from_shm(ctx.offset_variables.fill_blacks, 'i') == 0:
+        image_file = select_inv(image_file, 15, 15, 80)   # good 15, 15, 80 
+    #print("###", int(n), inv, inv2)
     return image_file
 
+def check_and_invert(image_file):
+    invert =  get_val_from_shm(ctx.offset_variables.invert, 'i')
+    if invert > -1:
+        if invert == 0:
+            image_file = ImageOps.invert(image_file)
+        else:
+            image_file = smart_invert(image_file)
+    return image_file
 
 
 def float_to_bytearray(float):
@@ -579,9 +626,8 @@ class shared_var:
         self.enhance_before_greyscale = offset_object(30, 0, 'i')
         self.grey_to_monochrome_threshold =   offset_object(34, 0,'i')
         self.invert =   offset_object(38, 0,'i')
-
         self.invert_threshold =   offset_object(42, 0,'i')
-
+        self.fill_blacks =   offset_object(46, 0,'i')
 
 
 def apply_enhancements(image_file, conf, offsets):
@@ -623,12 +669,9 @@ def convert_to_greyscale_and_enhance(image_file, conf, offset_variables):
     if enhance_before_greyscale:
         image_file = apply_enhancements(image_file, conf, offset_variables)
         
-    if val == 0 or val == 9:
+    if val == 9 or val == 0:
         image_file = image_file.convert('L')
-        invert =  get_val_from_shm(offset_variables.invert, 'i')
-        if invert > -1:
-            if invert == 0: image_file = ImageOps.invert(image_file)
-            else:   image_file = smart_invert(image_file)
+        image_file = check_and_invert(image_file)
 
     if enhance_before_greyscale  == 0:
         image_file = apply_enhancements(image_file, conf, offset_variables)
