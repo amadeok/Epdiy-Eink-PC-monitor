@@ -12,7 +12,7 @@ Video:
 
 
 #### Supported platforms:
-It has been tested on Ubuntu 20.04 and Windows 10 version 20H2
+At the moment only Linux, but will be ported for Windows. It has been tested on Ubuntu 20.04
 
 ------------
 
@@ -44,37 +44,19 @@ pip install  numpy
 
 1) Once you have the board, flash the demo example on the example folder of the Epdiy repository to verify that it is working correctly.
 
-3) Get the repositories: 
-On linux:
+3)  Get the Pc Monitor application repository:
 ```bash
 cd
-git clone https://github.com/vroland/epdiy
-
 git clone https://github.com/amadeok/Epdiy-Eink-PC-monitor
 cp -R ~/Epdiy-Eink-PC-monitor/pc_monitor ~/epdiy/examples 
 
-```  
-On windows' command prompt: 
-```bash
-cd c:\
-git clone https://github.com/vroland/epdiy
-git clone https://github.com/amadeok/Epdiy-Eink-PC-monitor
-Xcopy /E /I C:\Epdiy-Eink-PC-monitor C:\epdiy\examples 
-
-```  
-
+```
 
 4) The computer and board should connect to the same wifi network. Go to      *~/epdiy/examples/pc-monitor/main/*, open *main.c* , go to line 31  and insert the SSID of the wifi network you are going to use in the *WIFI_SSID* variable  and the password of the wifi in the *WIFI_PASS* variable.
 
 5) Build  and flash the client application for the board:
-On linux:
 ```bash
 cd ~/epdiy/examples/pc_monitor
-idf.py build && idf.py flash -b 921600 && idf.py monitor
-```
-On windows:
-```bash
-cd c:\epdiy\examples\pc_monitor
 idf.py build && idf.py flash -b 921600 && idf.py monitor
 ```
 
@@ -94,27 +76,19 @@ Open *example_display.conf* in  *~/epdiy/examples/pc_monitor/pc_host_app/* with 
 
 8) Build the pc-host application:
 On a new terminal:
-On Linux:
 ```bash
 cd   ~/epdiy/examples/pc_monitor/pc_host_app/
 g++  main.cpp generate_eink_framebuffer.cpp rle_compression.cpp utils.cpp -o process_capture -I include
-```
-
-On Windows(requires MinGW installed and on PATH):
-```bash
- cd   C:\epdiy\examples\pc_monitor\pc_host_app\
-
- g++ main.cpp  generate_eink_framebuffer.cpp rle_compression.cpp  utils.cpp   -o   process_capture.exe   -I "C:\Epdiy-Eink-PC-monitor\pc_monitor\pc_host_app\include"  -lws2_32
 
 ```
 9) Now the pc is ready to start the mirroring. If the board is ready to start mirroring it will display a message saying "Socket listening ".
 To start the mirroring execute:
 ```bash
-python screen_capture.py example_display.conf
+python3 screen_capture.py example_display.conf
 ```
 If you want to hide the terminal output run it like this:
 ```bash
-python screen_capture.py example_display.conf -silent
+python3 screen_capture.py example_display.conf -silent
 ```
 Important: always exit the pc host application by pressing the letter **q**
 
