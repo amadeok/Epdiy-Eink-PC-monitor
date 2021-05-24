@@ -1,8 +1,11 @@
 #include <2bitLUTforC_inv.h>
 #include <string.h>
 #include <utils.h>
+#include <cstdlib>
+#include <stdio.h>
+#include <unistd.h>
 
-extern int total_nb_pixels, refres_every_x_frames;
+extern int total_nb_pixels, refres_every_x_frames, nb_draws;
 extern char working_dir[256];
 ;
 int loop_counter0 = 1, loop_counter1 = 0;
@@ -23,71 +26,180 @@ void *generate_eink_framebuffer_v1(unsigned char *source_1bpp, char *padded_2bpp
     // array_to_file(padded_2bpp_framebuffer_current, 10000, working_dir, "padded_2bpp_framebuffer_current", 0);
 }
 
-void generate_eink_framebuffer_v2(unsigned char *source_8bpp_current, unsigned char *source_8bpp_previous, unsigned char *source_8bpp_modified_previous, char *eink_framebuffer)
+void generate_eink_framebuffer_v2(char *source_8bpp_current, char *source_8bpp_previous, char *source_8bpp_modified_previous, char **eink_framebuffer, int mode)
 { //generate eink framebuffer from 8bpp monochrome capture, slower than v1
-    memset(eink_framebuffer, 0, total_nb_pixels / 4);
-    unsigned char temp_mask = 0;
-    int dif_counter = 0, delta_counter = 0, delta_nb;
-    for (int counter = 0; counter < total_nb_pixels; counter += 4)
+    if (mode != 10)
     {
-        temp_mask = 0;
-
-        for (int y = 0; y < 4; y++)
+        char *eink_framebuffer_ = eink_framebuffer[0];
+        memset(eink_framebuffer, 0, total_nb_pixels / 4);
+        unsigned char temp_mask = 0;
+        int dif_counter = 0, delta_counter = 0, delta_nb;
+        for (int counter = 0; counter < total_nb_pixels; counter += 4)
         {
-            if (source_8bpp_previous[counter + y] == 1 && source_8bpp_current[counter + y] == 0)
+            temp_mask = 0;
+
+            for (int y = 0; y < 4; y++)
             {
-                temp_mask |= 1 << y * 2; // make pixel blacker
+                if (source_8bpp_previous[counter + y] == 1 && source_8bpp_current[counter + y] == 0)
+                {
+                    temp_mask |= 1 << y * 2; // make pixel blacker
+                }
+                else if (source_8bpp_previous[counter + y] == 0 && source_8bpp_current[counter + y] == 1)
+                {
+                    temp_mask |= 2 << y * 2; // make pixel whiter
+                }
             }
-            else if (source_8bpp_previous[counter + y] == 0 && source_8bpp_current[counter + y] == 1)
+            eink_framebuffer_[delta_counter] |= temp_mask;
+            delta_counter++;
+        }
+    }
+    else
+    {
+
+        for (int x = 0; x < nb_draws; x++)
+            memset(eink_framebuffer[x], 0, total_nb_pixels / 4);
+        memset(source_8bpp_previous, 255, total_nb_pixels);
+        array_to_file(source_8bpp_current, total_nb_pixels, working_dir, "source_8bpp_current", 0);
+        array_to_file(source_8bpp_previous, total_nb_pixels, working_dir, "source_8bpp_previous", 0);
+        unsigned char temp_mask = 0;
+        unsigned char temp_masks[4];
+        int cur = 0, prev = 0;
+        int dif_counter = 0, delta_counter = 0, delta_nb;
+        int n = 0;
+        for (int counter = 0; counter < total_nb_pixels; counter += 4)
+        {
+            temp_mask = 0;
+            for (int k = 0; k < nb_draws; k++)
+                temp_masks[k] = 0;
+            for (int y = 0; y < 4; y++)
             {
-                temp_mask |= 2 << y * 2; // make pixel whiter
+
+                cur = (uint8_t)source_8bpp_current[counter + y];
+                prev = (uint8_t)source_8bpp_previous[counter + y];
+                if (counter +y == 50)
+                    n = 0;
+                //n = (uint8_t)source_8bpp_previous[counter + y] - (uint8_t)source_8bpp_current[counter + y];
+                switch (cur)
+                {
+                case 0:
+                    switch (prev)
+                    {
+                    case 0:
+                        break;
+                    case 85:
+                        temp_masks[0] |= 1 << y * 2; // make pixel blacker
+                        break;
+                    case 170:
+                        for (int q = 0; q < 2; q++) // make pixel blacker
+                            temp_masks[q] |= 1 << y * 2;
+                        break;
+
+                    case 255:
+                        for (int q = 0; q < 3; q++) // make pixel blacker
+                            temp_masks[q] |= 1 << y * 2;
+                        break;
+                    }
+                    break;
+
+                case 85: //cur
+                    switch (prev)
+                    {
+                    case 0:
+                        temp_masks[0] |= 2 << y * 2; // make pixel whiter
+                        break;
+                    case 85:
+                        break;
+                    case 170:
+                        temp_masks[0] |= 1 << y * 2; // make pixel blacker
+                        break;
+
+                    case 255:
+                        for (int q = 0; q < 2; q++)
+                            temp_masks[q] |= 1 << y * 2; // make pixel blacker
+                        break;
+                    }
+                    break;
+
+                case 170: //cur
+                    switch (prev)
+                    {
+                    case 0:
+                        for (int q = 0; q < 2; q++)
+                            temp_masks[q] |= 2 << y * 2; // make pixel whiter
+                        break;
+                    case 85:
+                        temp_masks[0] |= 2 << y * 2; // make pixel whiter
+                        break;
+                    case 170:
+                        break;
+
+                    case 255:
+                        temp_masks[0] |= 1 << y * 2; // make pixel blacker
+                        break;
+                    }
+                    break;
+
+                case 255: //cur
+                    switch (prev)
+                    {
+                    case 0:
+                        for (int q = 0; q < 3; q++)
+                            temp_masks[q] |= 2 << y * 2; // make pixel blacker
+                        break;
+                    case 85:
+                        for (int q = 0; q < 2; q++)
+                            temp_masks[q] |= 2 << y * 2; // make pixel blacker
+                        break;
+                    case 170:
+                        temp_masks[0] |= 2 << y * 2; // make pixel blacker
+                        break;
+                    case 255:
+                        break;
+                    }
+                    break;
+                }
+            }
+            delta_counter++;
+
+            for (int k = 0; k < nb_draws; k++)
+            {
+                eink_framebuffer[k][delta_counter] |= temp_masks[k];
             }
         }
-        eink_framebuffer[delta_counter] |= temp_mask;
-        delta_counter++;
+        for (int k = 0; k < nb_draws; k++)
+        {
+            array_to_file(eink_framebuffer[k], 230400, working_dir, "eink_framebuffer", k);
+        }
     }
     //     array_to_file(eink_framebuffer, 230400, working_dir, "eink_framebuffer", 0);
 }
 
-void generate_filter_framebuffer(unsigned char *source_8bpp_current, unsigned char *source_8bpp_previous, char *filter_framebuffer)
+void quantize(char *source_8bpp_current, char *source_8bpp_modified_current, int size)
 {
+    int val;
 
-    array_to_file(source_8bpp_current, total_nb_pixels / 4, working_dir, "source_8bpp_current", 0);
-
-   array_to_file(source_8bpp_previous, total_nb_pixels / 4, working_dir, "source_8bpp_previous", 0);
-
-    memset(filter_framebuffer, 0, total_nb_pixels / 4);
-    unsigned char temp_mask = 0;
-    int delta_counter = 0;
-    for (int counter = 0; counter < total_nb_pixels; counter += 4)
-    {
-        temp_mask = 0;
-
-        for (int y = 0; y < 4; y++)
+    for (int h = 0; h < size; h++)
+    { // int v = source_8bpp_current[h];
+        val = (uint8_t)source_8bpp_current[h] / 64;
+        switch (val)
         {
-            if (source_8bpp_current[counter + y] > source_8bpp_previous[counter + y])
-            {
-                temp_mask |= 2 << y * 2; // make pixel whiter // 128 >> y * 2 when not inverted
-            }
-            else if (source_8bpp_current[counter + y] < source_8bpp_previous[counter + y])
-            {
-                temp_mask |= 1 << y * 2; // make pixel blacker // 64 >> y * 2 when not inverted
-            }
+        case 0:
+            source_8bpp_modified_current[h] = 0;
+            break;
+        case 1:
+            source_8bpp_modified_current[h] = 85;
+            break;
+        case 2:
+            source_8bpp_modified_current[h] = 170;
+            break;
+        case 3:
+            source_8bpp_modified_current[h] = 255;
+            break;
         }
-        filter_framebuffer[delta_counter] |= temp_mask;
-        delta_counter++;
     }
 }
 
-void filter_unwanted_dither(char *eink_framebuffer, char *filter_framebuffer, char *eink_framebuffer_modified, int eink_framebuffer_size)
-{
-    for (int h = 0; h < eink_framebuffer_size; h++)
-    {
-        eink_framebuffer_modified[h] = eink_framebuffer[h] & filter_framebuffer[h];
-    }
-}
-
-void generate_eink_framebuffer_v2_with_ghost(unsigned char *source_8bpp_current, unsigned char *source_8bpp_previous, unsigned char *source_8bpp_modified_previous, unsigned char *eink_framebuffer, int nb_pixels_to_change)
+void generate_eink_framebuffer_v2_with_ghost(char *source_8bpp_current, char *source_8bpp_previous, char *source_8bpp_modified_previous, char **eink_framebuffer, int nb_pixels_to_change)
 { // generate eink framebuffer and attempt to reduce ghosting (experimental)
     memset(eink_framebuffer, 0, total_nb_pixels / 4);
     unsigned char temp_mask = 0;
@@ -138,7 +250,7 @@ void generate_eink_framebuffer_v2_with_ghost(unsigned char *source_8bpp_current,
                 temp_mask |= 2 << y * 2; // make whiter
             }
         }
-        eink_framebuffer[delta_counter] |= temp_mask;
+        eink_framebuffer[0][delta_counter] |= temp_mask;
         delta_counter++;
         //     array_to_file(eink_framebuffer, 230400, working_dir, "eink_framebuffer", 0);
     }

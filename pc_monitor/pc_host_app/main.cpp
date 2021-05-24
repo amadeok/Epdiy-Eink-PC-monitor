@@ -56,7 +56,7 @@ char *tmp_array;
 
 char *compressed_eink_framebuffer_ptrs[16]; //array of pointers pointing to chunks of framebuffer
 int id, refresh_every_x_frames = 0, selective_compression;
-int total_nb_pixels, eink_framebuffer_size, chunk_size, nb_chunks;
+int total_nb_pixels, eink_framebuffer_size, chunk_size, nb_chunks, nb_draws;
 int source_image_bit_depth = 1;
 bool disable_logging;
 uint32_t loop_counter[1] = {0};
@@ -64,10 +64,11 @@ int mouse_moved = 0;
 int pseudo_greyscale_mode = 0, improve_dither;
 int do_full_refresh = 1;
 unsigned char full_refresh_delay = 30;
-
+int per_frame_wifi_settings_size;
 char ready0[6];
 char ready1[6];
-char per_frame_wifi_settings[6] = {0, 0, 0, 0, 0, 0};
+char *per_frame_wifi_settings;
+uint16_t *draw_rmt_times;
 
 char input_pipe[200];
 char output_pipe[200];
@@ -104,16 +105,20 @@ void wifi_transfer(char *eink_framebuffer_swapped, int eink_framebuffer_size)
         per_frame_wifi_settings[2] = full_refresh_delay;
     }
     else
-        per_frame_wifi_settings[2] = '0';
+        per_frame_wifi_settings[2] = 0;
 
-    send(socket_desc, per_frame_wifi_settings, 6, 0);
-    int ret0 = recv(socket_desc, ready2, 6, 0);
-    for (int k = 0; k < 6; k++)
+    memcpy(per_frame_wifi_settings + 6, draw_rmt_times, nb_draws * 2);
+
+    send(socket_desc, per_frame_wifi_settings, per_frame_wifi_settings_size, 0);
+    int ret0 = recv(socket_desc, ready2, per_frame_wifi_settings_size, 0);
+
+    for (int k = 0; k < per_frame_wifi_settings_size; k++)
     {
         if (ready2[k] != per_frame_wifi_settings[k])
         {
+            printf("%d \n", ready2[k]);
             printf("warning ready2 per_frame_wifi_settings dif \n");
-            sleep(100000);
+            //sleep(100000);
         }
     }
 
@@ -236,12 +241,12 @@ static int mirroring_task()
 
     int compressed_framebuffer_size = 0;
 
-    unsigned char *source_8bpp_current;           // array containing the current monochrome 8bpp screen capture
-    unsigned char *source_8bpp_previous;          //array containing the previous monochrome 8bpp screen capture
-    unsigned char *source_8bpp_modified_current;  //same as 'source_8bpp_current' but has been modified
-    unsigned char *source_8bpp_modified_previous; //same as 'source_8bpp_previous' but has been modified
+    char *source_8bpp_current;           // array containing the current monochrome 8bpp screen capture
+    char *source_8bpp_previous;          //array containing the previous monochrome 8bpp screen capture
+    char *source_8bpp_modified_current;  //same as 'source_8bpp_current' but has been modified
+    char *source_8bpp_modified_previous; //same as 'source_8bpp_previous' but has been modified
 
-    char *eink_framebuffer; // the 2bpp array that will be fed directly to the display
+    char *eink_framebuffer[16]; // the 2bpp array that will be fed directly to the display
 
     char *filter_framebuffer;        // a filter framebuffer
     char *eink_framebuffer_modified; // a filter framebuffer that has been modified
@@ -255,21 +260,29 @@ static int mirroring_task()
 
     unsigned char *source_1bpp; //array containing the current monochrome 1bpp screen capture
     uint16_t *added_compression_arr[8];
+    draw_rmt_times = (uint16_t *)calloc(nb_draws, sizeof(uint16_t));
+    per_frame_wifi_settings = (char *)calloc(per_frame_wifi_settings_size, sizeof(char));
+
+    int st = 200;
+    for (int h = 0; h < nb_draws; h++)
+        draw_rmt_times[h] = (st += 10);
+
     line_changed = (char *)calloc(height_resolution + 2, sizeof(char));
     source_1bpp = (unsigned char *)calloc(total_nb_pixels, sizeof(unsigned char));
     tmp_array = (char *)calloc(eink_framebuffer_size + 50000, sizeof(unsigned char));
-    ready2 = (char *)calloc(6, sizeof(char));
-    memset(ready2, 0, 6);
+
+    ready2 = (char *)calloc(per_frame_wifi_settings_size, sizeof(char));
+
+    memset(ready2, 0, per_frame_wifi_settings_size);
+
     padded_2bpp_framebuffer_current = (char *)calloc(eink_framebuffer_size, sizeof(unsigned char));
     padded_2bpp_framebuffer_previous = (char *)calloc(eink_framebuffer_size, sizeof(unsigned char));
 
-    source_8bpp_modified_current = (unsigned char *)calloc(total_nb_pixels, sizeof(unsigned char));
-    source_8bpp_modified_previous = (unsigned char *)calloc(total_nb_pixels, sizeof(unsigned char));
-    source_8bpp_current = (unsigned char *)calloc(total_nb_pixels, sizeof(unsigned char));
-    source_8bpp_previous = (unsigned char *)calloc(total_nb_pixels, sizeof(unsigned char));
-
+    source_8bpp_modified_current = (char *)calloc(total_nb_pixels, sizeof(unsigned char));
+    source_8bpp_modified_previous = (char *)calloc(total_nb_pixels, sizeof(unsigned char));
+    source_8bpp_current = (char *)calloc(total_nb_pixels, sizeof(unsigned char));
+    source_8bpp_previous = (char *)calloc(total_nb_pixels, sizeof(unsigned char));
     compressed_eink_framebuffer = (char *)calloc(eink_framebuffer_size, sizeof(char));
-    eink_framebuffer = (char *)calloc(eink_framebuffer_size, sizeof(char));
     filter_framebuffer = (char *)calloc(eink_framebuffer_size, sizeof(char));
     eink_framebuffer_modified = (char *)calloc(eink_framebuffer_size, sizeof(char));
     eink_framebuffer_swapped = (char *)calloc(eink_framebuffer_size, sizeof(char));
@@ -278,8 +291,11 @@ static int mirroring_task()
     for (int h = 0; h < nb_chunks; h++)
     {
         compressed_eink_framebuffer_ptrs[h] = (char *)calloc(chunk_size * 2, sizeof(char));
-        added_compression_arr[h] = (uint16_t *)calloc(chunk_size * 2, sizeof(char));
+        //added_compression_arr[h] = (uint16_t *)calloc(chunk_size * 2, sizeof(char));
     }
+    for (int h = 0; h < nb_draws; h++)
+        eink_framebuffer[h] = (char *)calloc(eink_framebuffer_size, sizeof(char));
+
     if (source_image_bit_depth == 1)
     { //assume the first screen capture to be completely white
         memset(padded_2bpp_framebuffer_previous, 85, eink_framebuffer_size * sizeof(unsigned char));
@@ -296,11 +312,14 @@ static int mirroring_task()
         return -1;
     }
     int total[] = {1}, repeat_counter = 0, next = 0;
-    ;
+
+    printf("C++ ID %d mirroring started \n", id);
+
     while (1)
     {
         if (total[0] != 0 && wifi_on == 1) // if screen didn't change don't wait for ack from board
             recv(socket_desc, ready0, 6, 0);
+
         ret2 = pipe_write(fd1, ack, 1, ret2);
         ret2 = pipe_read(fd0, ack2, 3, ret2);
 
@@ -320,10 +339,13 @@ static int mirroring_task()
             mouse_moved = 0;
             //   printf("not moved\n");
         }
-        if (ack2[2] == 1)
-            pseudo_greyscale_mode = 1;
+        if (ack2[2] == 10)
+            source_image_bit_depth = 8;
         else
-            pseudo_greyscale_mode = 0;
+        {
+            source_image_bit_depth = 1;
+            nb_draws = 1;
+        }
 
         long t0 = getTick();
         ret2 = pipe_read(fd0, line_changed, height_resolution, ret2);
@@ -340,10 +362,8 @@ static int mirroring_task()
 
         if (source_image_bit_depth == 8 || improve_dither == 1)
         {
-            ret2 = pipe_write(fd1, ack, 1, ret2);
-            ret2 = pipe_read(fd0, ack2, 3, ret2);
 
-            memcpy(source_8bpp_previous, source_8bpp_current, total_nb_pixels * sizeof(unsigned char));
+        //    memcpy(source_8bpp_previous, source_8bpp_modified_current, total_nb_pixels * sizeof(unsigned char));
 
             ret2 = pipe_read(fd0, source_8bpp_current, total_nb_pixels, ret2);
             if (ret2 != total_nb_pixels)
@@ -364,67 +384,75 @@ static int mirroring_task()
             else
                 memcpy(padded_2bpp_framebuffer_previous, padded_2bpp_framebuffer_current, eink_framebuffer_size);
 
-            generate_eink_framebuffer_v1(source_1bpp, padded_2bpp_framebuffer_current, padded_2bpp_framebuffer_previous, eink_framebuffer);
+            generate_eink_framebuffer_v1(source_1bpp, padded_2bpp_framebuffer_current, padded_2bpp_framebuffer_previous, eink_framebuffer[0]);
 
-            optimize_rle(eink_framebuffer);
-            // if (improve_dither == 1)
-            // {
-            //     generate_filter_framebuffer(source_8bpp_current, source_8bpp_previous, filter_framebuffer);
-            //     array_to_file(filter_framebuffer, total_nb_pixels / 4, working_dir, "filter_framebuffer", 0);
-
-            //     filter_unwanted_dither(eink_framebuffer, filter_framebuffer, eink_framebuffer_modified, eink_framebuffer_size);
-            //     array_to_file(eink_framebuffer, total_nb_pixels / 4, working_dir, "eink_framebuffer", 0);
-            //     array_to_file(eink_framebuffer_modified, total_nb_pixels / 4, working_dir, "eink_framebuffer_modified", 0);
-            // }
+            optimize_rle(eink_framebuffer[0]);
         }
         else if (source_image_bit_depth == 8)
         {
-            generate_eink_framebuffer_v2(source_8bpp_current, source_8bpp_previous, source_8bpp_modified_previous, eink_framebuffer);
+            switch (nb_draws)
+            {
+            case 1:
+                generate_eink_framebuffer_v2(source_8bpp_current, source_8bpp_previous, source_8bpp_modified_previous, eink_framebuffer, ack2[2]);
+            default:
+                int t0 = getTick();
+                quantize(source_8bpp_current, source_8bpp_modified_current, total_nb_pixels);
+                printf("%d \n", getTick() - t0);
+              //  array_to_file(source_8bpp_modified_current, total_nb_pixels, working_dir, "source_8bpp_modified_current", 0);
+                std::string filename = "/home/amadeok/epdiy-working/examples/pc_monitor/pc_host_app/img_test.py";
+                std::string command = "python3 ";
+                command += filename;
+                //   system(command.c_str());
+                generate_eink_framebuffer_v2(source_8bpp_modified_current, source_8bpp_previous, source_8bpp_modified_previous, eink_framebuffer, ack2[2]);
+            }
         }
         // if (pseudo_greyscale_mode == 1)
         //     improve_dither_compression(eink_framebuffer, eink_framebuffer_size, line_changed, width_resolution, height_resolution);
-        swap_bytes(eink_framebuffer, eink_framebuffer_swapped, eink_framebuffer_size, source_image_bit_depth);
-
-        //array_to_file(eink_framebuffer_swapped, eink_framebuffer_size, working_dir, "eink_fb_sw", 0);
-
-        rle_compress(eink_framebuffer_swapped, tmp_array, nb_chunks, compressed_eink_framebuffer, eink_framebuffer_size, chunk_size);
-
-        // rle_compress_v2(eink_framebuffer_swapped, tmp_array, nb_chunks, added_compression_arr, chunk_size);
-
-        for (int g = 0; g < nb_chunks * 4; g += 4)
+        for (int g = 0; g < nb_draws; g++)
         {
-            unsigned int number2 = htonl(compressed_chunk_lengths[g / 4]);
-            memcpy(compressed_chunk_lengths_in_bytes + g, &compressed_chunk_lengths[g / 4], 4);
-            // tot += foo;
-        }
-        // rle_extract1(decompressed, nb_chunks, eink_framebuffer_swapped, eink_framebuffer_size, compressed_chunk_lengths[0]); //for testing
+            swap_bytes(eink_framebuffer[g], eink_framebuffer_swapped, eink_framebuffer_size, source_image_bit_depth);
 
-        // print_chunk_sizes();
+            //array_to_file(eink_framebuffer_swapped, eink_framebuffer_size, working_dir, "eink_fb_sw", 0);
 
-        total[0] = 0;
-        uint16_t total2[1];
+            rle_compress(eink_framebuffer_swapped, tmp_array, nb_chunks, compressed_eink_framebuffer, eink_framebuffer_size, chunk_size);
 
-        if (loop_counter[0] == refresh_every_x_frames || loop_counter[0] == refresh_every_x_frames + 1)
-        {
-            memset(line_changed, 1, height_resolution);
-            total[0] = height_resolution;
-        }
-        //  if (loop_counter[0] != refresh_every_x_frames)
-        else
-        {
-            for (int h = 0; h < height_resolution; h++)
-                total[0] += line_changed[h];
-            memcpy(line_changed + height_resolution, total, 2);
-            memcpy(total2, line_changed + height_resolution, 2);
-        }
+            // rle_compress_v2(eink_framebuffer_swapped, tmp_array, nb_chunks, added_compression_arr, chunk_size);
 
-        if (total[0] != 0 && wifi_on == 1 && FT245MODE == 0) //send framebuffer only if current capture is different than previous
-        {
-            wifi_transfer(eink_framebuffer_swapped, eink_framebuffer_size);
-            repeat_counter = 0;
-            // printf("loop_counter %d\n", loop_counter[0]);
-            if (total[0] > 85) //don't increase the counter to clear te display if only 85 lines have changed
-                loop_counter[0]++;
+            for (int g = 0; g < nb_chunks * 4; g += 4)
+            {
+                unsigned int number2 = htonl(compressed_chunk_lengths[g / 4]);
+                memcpy(compressed_chunk_lengths_in_bytes + g, &compressed_chunk_lengths[g / 4], 4);
+                // tot += foo;
+            }
+            // rle_extract1(decompressed, nb_chunks, eink_framebuffer_swapped, eink_framebuffer_size, compressed_chunk_lengths[0]); //for testing
+
+            // print_chunk_sizes();
+
+            total[0] = 0;
+            uint16_t total2[1];
+
+            if (loop_counter[0] == refresh_every_x_frames || loop_counter[0] == refresh_every_x_frames + 1)
+            {
+                memset(line_changed, 1, height_resolution);
+                total[0] = height_resolution;
+            }
+            //  if (loop_counter[0] != refresh_every_x_frames)
+            else
+            {
+                for (int h = 0; h < height_resolution; h++)
+                    total[0] += line_changed[h];
+                memcpy(line_changed + height_resolution, total, 2);
+                memcpy(total2, line_changed + height_resolution, 2);
+            }
+
+            if (total[0] != 0 && wifi_on == 1 && FT245MODE == 0) //send framebuffer only if current capture is different than previous
+            {
+                wifi_transfer(eink_framebuffer_swapped, eink_framebuffer_size);
+                repeat_counter = 0;
+                // printf("loop_counter %d\n", loop_counter[0]);
+                if (total[0] > 85) //don't increase the counter to clear te display if only 85 lines have changed
+                    loop_counter[0]++;
+            }
         }
         if (disable_logging == 0)
             printf("Processing time %dms\n", getTick() - t0);
@@ -437,7 +465,7 @@ int main(int argc, char *argv[])
 {
     char nb_args = argc;
     char settings_size[1];
-    settings_size[0] = (nb_args - 7) * 2;
+    settings_size[0] = (nb_args - 7 - 1) * 2;
     int16_t *esp32_settings = (int16_t *)calloc(settings_size[0], sizeof(uint8_t));
 
     //  printf("settings size %d \n", settings_size[0]);
@@ -459,10 +487,13 @@ int main(int argc, char *argv[])
     esp32_settings[7] = std::stoi(argv[13]);
     esp32_settings[8] = std::stoi(argv[14]);
     esp32_settings[9] = std::stoi(argv[15]);
-    do_full_refresh = std::stoi(argv[16]);
+    esp32_settings[10] = std::stoi(argv[16]);
+    per_frame_wifi_settings_size = 6 + esp32_settings[10] * 2;
+    esp32_settings[11] = per_frame_wifi_settings_size;
+
+    do_full_refresh = std::stoi(argv[nb_args - 3]);
 
     disable_logging = std::stoi(argv[nb_args - 2]);
-    wifi_on = std::stoi(argv[nb_args - 1]);
 
     printf("esp32_ip_address: %s\n", esp32_ip_address);
     printf("display id: %s\n", display_id);
@@ -480,6 +511,10 @@ int main(int argc, char *argv[])
     printf("pseudo_greyscale_mode: %d\n", esp32_settings[7]);
     printf("selective_compression: %d\n", selective_compression = esp32_settings[8]);
     printf("nb_chunks: %d\n", nb_chunks = esp32_settings[9]);
+    printf("nb_draws: %d\n", nb_draws = esp32_settings[10]);
+
+    wifi_on = std::stoi(argv[nb_args - 1]);
+
     //  printf("improve_dither: %d\n", improve_dither = std::stoi(argv[15]));
 
     if (disable_logging == 1)
@@ -542,13 +577,13 @@ int main(int argc, char *argv[])
     {
         printf("Could not create socket\n");
     }
-    #ifdef _WIN32
+#ifdef _WIN32
     int err = WSAGetLastError();
     if (!ISVALIDSOCKET(socket_desc))
     {
         fprintf(stderr, "socket() failed! %d\n", WSAGetLastError());
     }
-    #endif
+#endif
 
     int yes = 0; // 1 - on, 0 - off
     int result = setsockopt(socket_desc,
