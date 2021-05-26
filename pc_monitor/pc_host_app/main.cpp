@@ -10,6 +10,8 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <dirent.h>
+#include <errno.h>
 
 #ifdef __linux__
 #include <sys/socket.h>
@@ -55,9 +57,10 @@ unsigned char *received;              // for testing or debugging
 char *tmp_array;
 
 char *compressed_eink_framebuffer_ptrs[16]; //array of pointers pointing to chunks of framebuffer
-int id, refresh_every_x_frames = 0, selective_compression;
-int total_nb_pixels, eink_framebuffer_size, chunk_size, nb_chunks, nb_draws;
-int source_image_bit_depth = 1;
+int id, refresh_every_x_frames = 0, refresh_every_x_frames_, selective_compression;
+
+int total_nb_pixels, eink_framebuffer_size, chunk_size, nb_chunks, nb_draws, nb_rmt_times;
+int source_image_bit_depth = 1, mode = -1;
 bool disable_logging;
 uint32_t loop_counter[1] = {0};
 int mouse_moved = 0;
@@ -84,7 +87,6 @@ DWORD dwBytesWritten;
 void wifi_transfer(char *eink_framebuffer_swapped, int eink_framebuffer_size)
 {
     DWORD ret2;
-
     char *framebuffer_to_send[16];
     int framebuffer_to_send_size;
 
@@ -95,11 +97,9 @@ void wifi_transfer(char *eink_framebuffer_swapped, int eink_framebuffer_size)
     else
         per_frame_wifi_settings[0] = 0;
 
-    if (pseudo_greyscale_mode == 1)
-        per_frame_wifi_settings[1] = 'p';
-    else
-        per_frame_wifi_settings[1] = 0;
-    if (loop_counter[0] == refresh_every_x_frames && do_full_refresh != 0)
+    per_frame_wifi_settings[1] = mode;
+
+    if (loop_counter[0] == refresh_every_x_frames_ && do_full_refresh != 0)
     {
         loop_counter[0] = 0;
         per_frame_wifi_settings[2] = full_refresh_delay;
@@ -107,7 +107,10 @@ void wifi_transfer(char *eink_framebuffer_swapped, int eink_framebuffer_size)
     else
         per_frame_wifi_settings[2] = 0;
 
-    memcpy(per_frame_wifi_settings + 6, draw_rmt_times, nb_draws * 2);
+    memcpy(per_frame_wifi_settings + 6, draw_rmt_times, nb_rmt_times * 2);
+    // for (int x = 0; x < nb_rmt_times; x++)
+    //     printf(" %d ", draw_rmt_times[x]);
+    // printf("\n wifi ");
 
     send(socket_desc, per_frame_wifi_settings, per_frame_wifi_settings_size, 0);
     int ret0 = recv(socket_desc, ready2, per_frame_wifi_settings_size, 0);
@@ -122,7 +125,7 @@ void wifi_transfer(char *eink_framebuffer_swapped, int eink_framebuffer_size)
         }
     }
 
-    if (loop_counter[0] == refresh_every_x_frames + 1)
+    if (loop_counter[0] == refresh_every_x_frames_ + 1)
         loop_counter[0] = 0;
     ret2 = send(socket_desc, compressed_chunk_lengths_in_bytes, nb_chunks * 4 * sizeof(unsigned char), 0);
 
@@ -232,7 +235,7 @@ static int mirroring_task()
     chunk_size = (eink_framebuffer_size / nb_chunks);
 
     unsigned char ack[1] = {246};
-    unsigned char ack2[3];
+    unsigned char *ack2;
     char ready0[6];
     char ready1[6];
 
@@ -260,19 +263,14 @@ static int mirroring_task()
 
     unsigned char *source_1bpp; //array containing the current monochrome 1bpp screen capture
     uint16_t *added_compression_arr[8];
-    draw_rmt_times = (uint16_t *)calloc(nb_draws, sizeof(uint16_t));
     per_frame_wifi_settings = (char *)calloc(per_frame_wifi_settings_size, sizeof(char));
-
-    int st = 200;
-    for (int h = 0; h < nb_draws; h++)
-        draw_rmt_times[h] = (st += 10);
 
     line_changed = (char *)calloc(height_resolution + 2, sizeof(char));
     source_1bpp = (unsigned char *)calloc(total_nb_pixels, sizeof(unsigned char));
     tmp_array = (char *)calloc(eink_framebuffer_size + 50000, sizeof(unsigned char));
 
     ready2 = (char *)calloc(per_frame_wifi_settings_size, sizeof(char));
-
+    ack2 = (unsigned char *)calloc(3 + (nb_rmt_times * 2), sizeof(char));
     memset(ready2, 0, per_frame_wifi_settings_size);
 
     padded_2bpp_framebuffer_current = (char *)calloc(eink_framebuffer_size, sizeof(unsigned char));
@@ -301,16 +299,20 @@ static int mirroring_task()
         memset(padded_2bpp_framebuffer_previous, 85, eink_framebuffer_size * sizeof(unsigned char));
         memset(padded_2bpp_framebuffer_current, 85, eink_framebuffer_size * sizeof(unsigned char));
     }
-    else if (source_image_bit_depth == 8)
-    { //assume the first screen capture to be completely white
-        memset(source_8bpp_current, 255, total_nb_pixels * sizeof(unsigned char));
-        memset(source_8bpp_previous, 255, total_nb_pixels * sizeof(unsigned char));
-    }
+    //else if (source_image_bit_depth == 8)
+    //{ //assume the first screen capture to be completely white
+
+    //  }
     else
     {
         printf("unsupported bit depth\n");
         return -1;
     }
+    memset(source_8bpp_current, 255, total_nb_pixels * sizeof(unsigned char));
+    memset(source_8bpp_modified_current, 255, total_nb_pixels * sizeof(unsigned char));
+
+    memset(source_8bpp_previous, 255, total_nb_pixels * sizeof(unsigned char));
+
     int total[] = {1}, repeat_counter = 0, next = 0;
 
     printf("C++ ID %d mirroring started \n", id);
@@ -321,8 +323,13 @@ static int mirroring_task()
             recv(socket_desc, ready0, 6, 0);
 
         ret2 = pipe_write(fd1, ack, 1, ret2);
-        ret2 = pipe_read(fd0, ack2, 3, ret2);
-
+        ret2 = pipe_read(fd0, ack2, 3 + nb_rmt_times * sizeof(uint16_t), ret2);
+        memcpy(draw_rmt_times, ack2 + 3, nb_rmt_times * sizeof(uint16_t));
+        mode = ack2[2];
+        if (mode == 10)
+            refresh_every_x_frames_ = refresh_every_x_frames * nb_draws;
+        else
+            refresh_every_x_frames_ = refresh_every_x_frames;
         if (ack2[0] == 101)
         {
             printf("C++ app ID %d exiting \n", id);
@@ -346,6 +353,9 @@ static int mirroring_task()
             source_image_bit_depth = 1;
             nb_draws = 1;
         }
+        // for (int a = 0; a < nb_rmt_times; a++)
+        //     printf("%d ", draw_rmt_times[a]);
+        // printf("%d \n", loop_counter[0]);
 
         long t0 = getTick();
         ret2 = pipe_read(fd0, line_changed, height_resolution, ret2);
@@ -359,30 +369,35 @@ static int mirroring_task()
                 return -1;
             }
         }
+        if (loop_counter[0] == refresh_every_x_frames_)
+        {
+            if (do_full_refresh == 0)
+                send_refresh_framebuffers(padded_2bpp_framebuffer_current, compressed_eink_framebuffer);
+
+            if (source_image_bit_depth == 1)
+                memset(padded_2bpp_framebuffer_previous, 85, eink_framebuffer_size * sizeof(unsigned char));
+            else
+                memset(source_8bpp_previous, 255, total_nb_pixels * sizeof(unsigned char));
+        }
+        else
+        {
+            if (source_image_bit_depth == 1)
+                memcpy(padded_2bpp_framebuffer_previous, padded_2bpp_framebuffer_current, eink_framebuffer_size);
+            else
+                memcpy(source_8bpp_previous, source_8bpp_modified_current, total_nb_pixels * sizeof(unsigned char));
+        }
 
         if (source_image_bit_depth == 8 || improve_dither == 1)
         {
 
-        //    memcpy(source_8bpp_previous, source_8bpp_modified_current, total_nb_pixels * sizeof(unsigned char));
-
             ret2 = pipe_read(fd0, source_8bpp_current, total_nb_pixels, ret2);
+
             if (ret2 != total_nb_pixels)
                 printf("warning ret2 total_nb_pixels\n");
         }
 
         if (source_image_bit_depth == 1)
         {
-            if (loop_counter[0] == refresh_every_x_frames)
-            {
-                if (do_full_refresh == 0)
-                    send_refresh_framebuffers(padded_2bpp_framebuffer_current, compressed_eink_framebuffer);
-                memset(padded_2bpp_framebuffer_previous, 85, eink_framebuffer_size * sizeof(unsigned char));
-                //  for (int h = 0; h < eink_framebuffer_size; h++)
-                //     padded_2bpp_framebuffer_previous[h] = 170;
-                // array_to_file(padded_2bpp_framebuffer_previous, 100000, working_dir, "padded_2bpp_framebuffer_previous", 0);
-            }
-            else
-                memcpy(padded_2bpp_framebuffer_previous, padded_2bpp_framebuffer_current, eink_framebuffer_size);
 
             generate_eink_framebuffer_v1(source_1bpp, padded_2bpp_framebuffer_current, padded_2bpp_framebuffer_previous, eink_framebuffer[0]);
 
@@ -395,21 +410,30 @@ static int mirroring_task()
             case 1:
                 generate_eink_framebuffer_v2(source_8bpp_current, source_8bpp_previous, source_8bpp_modified_previous, eink_framebuffer, ack2[2]);
             default:
-                int t0 = getTick();
+                //  int t0 = getTick();
                 quantize(source_8bpp_current, source_8bpp_modified_current, total_nb_pixels);
-                printf("%d \n", getTick() - t0);
-              //  array_to_file(source_8bpp_modified_current, total_nb_pixels, working_dir, "source_8bpp_modified_current", 0);
-                std::string filename = "/home/amadeok/epdiy-working/examples/pc_monitor/pc_host_app/img_test.py";
-                std::string command = "python3 ";
-                command += filename;
-                //   system(command.c_str());
+
+                array_to_file(source_8bpp_previous, total_nb_pixels, working_dir, "source_8bpp_previous", 0);
+                system("python3 /home/amadeok/epdiy-working/examples/pc_monitor/pc_host_app/img_test.py source_8bpp_previous0");
+                array_to_file(source_8bpp_modified_current, total_nb_pixels, working_dir, "source_8bpp_modified_current", 0);
+                system("python3 /home/amadeok/epdiy-working/examples/pc_monitor/pc_host_app/img_test.py source_8bpp_modified_current0");
+
+                // printf("%d \n", getTick() - t0);
                 generate_eink_framebuffer_v2(source_8bpp_modified_current, source_8bpp_previous, source_8bpp_modified_previous, eink_framebuffer, ack2[2]);
+
+                //  array_to_file(source_8bpp_modified_current, total_nb_pixels, working_dir, "source_8bpp_modified_current", 0);
             }
         }
         // if (pseudo_greyscale_mode == 1)
         //     improve_dither_compression(eink_framebuffer, eink_framebuffer_size, line_changed, width_resolution, height_resolution);
         for (int g = 0; g < nb_draws; g++)
         {
+            if (g != 0)
+            {
+                if (total[0] != 0 && wifi_on == 1) // if screen didn't change don't wait for ack from board
+                    recv(socket_desc, ready0, 6, 0);
+            }
+
             swap_bytes(eink_framebuffer[g], eink_framebuffer_swapped, eink_framebuffer_size, source_image_bit_depth);
 
             //array_to_file(eink_framebuffer_swapped, eink_framebuffer_size, working_dir, "eink_fb_sw", 0);
@@ -431,12 +455,12 @@ static int mirroring_task()
             total[0] = 0;
             uint16_t total2[1];
 
-            if (loop_counter[0] == refresh_every_x_frames || loop_counter[0] == refresh_every_x_frames + 1)
+            if (loop_counter[0] == refresh_every_x_frames_ || loop_counter[0] == refresh_every_x_frames_ + 1)
             {
                 memset(line_changed, 1, height_resolution);
                 total[0] = height_resolution;
             }
-            //  if (loop_counter[0] != refresh_every_x_frames)
+            //  if (loop_counter[0] != refresh_every_x_frames_)
             else
             {
                 for (int h = 0; h < height_resolution; h++)
@@ -463,7 +487,7 @@ static int mirroring_task()
 
 int main(int argc, char *argv[])
 {
-    char nb_args = argc;
+    int nb_args = argc;
     char settings_size[1];
     settings_size[0] = (nb_args - 7 - 1) * 2;
     int16_t *esp32_settings = (int16_t *)calloc(settings_size[0], sizeof(uint8_t));
@@ -478,7 +502,7 @@ int main(int argc, char *argv[])
     refresh_every_x_frames = std::stoi(argv[5]);
 
     esp32_settings[0] = std::stoi(argv[6]);
-    esp32_settings[1] = std::stoi(argv[7]);
+    char *rmt_high_time_s = argv[7];
     esp32_settings[2] = std::stoi(argv[8]);
     esp32_settings[3] = std::stoi(argv[9]);
     esp32_settings[4] = std::stoi(argv[10]);
@@ -488,11 +512,8 @@ int main(int argc, char *argv[])
     esp32_settings[8] = std::stoi(argv[14]);
     esp32_settings[9] = std::stoi(argv[15]);
     esp32_settings[10] = std::stoi(argv[16]);
-    per_frame_wifi_settings_size = 6 + esp32_settings[10] * 2;
-    esp32_settings[11] = per_frame_wifi_settings_size;
 
     do_full_refresh = std::stoi(argv[nb_args - 3]);
-
     disable_logging = std::stoi(argv[nb_args - 2]);
 
     printf("esp32_ip_address: %s\n", esp32_ip_address);
@@ -501,7 +522,7 @@ int main(int argc, char *argv[])
     printf("do_full_refresh: %d\n", do_full_refresh);
 
     printf("framebuffer_cycles: %d\n", esp32_settings[0]);
-    printf("rmt_high_time: %d\n", esp32_settings[1]);
+    // printf("rmt_high_time: %d\n", esp32_settings[1]);
     printf("enable_skipping: %d\n", esp32_settings[2]);
     printf("epd_skip_threshold: %d\n", esp32_settings[3]);
     printf("epd_skip_mouse_only: %d\n", esp32_settings[4]);
@@ -512,10 +533,36 @@ int main(int argc, char *argv[])
     printf("selective_compression: %d\n", selective_compression = esp32_settings[8]);
     printf("nb_chunks: %d\n", nb_chunks = esp32_settings[9]);
     printf("nb_draws: %d\n", nb_draws = esp32_settings[10]);
-
     wifi_on = std::stoi(argv[nb_args - 1]);
 
-    //  printf("improve_dither: %d\n", improve_dither = std::stoi(argv[15]));
+    if (nb_draws > esp32_settings[0])
+        nb_rmt_times = nb_draws;
+    else
+        nb_rmt_times = esp32_settings[0];
+
+    per_frame_wifi_settings_size = 6 + nb_rmt_times * 2;
+    esp32_settings[11] = per_frame_wifi_settings_size;
+
+    draw_rmt_times = (uint16_t *)calloc(nb_rmt_times, sizeof(uint16_t));
+
+    rmt_high_time_s = strtok(rmt_high_time_s, ":");
+    int n = 0;
+
+    while (rmt_high_time_s != NULL)
+    {
+        draw_rmt_times[n] = std::stoi(rmt_high_time_s);
+        rmt_high_time_s = strtok(NULL, ":");
+        n++;
+    }
+    while (n < nb_rmt_times)
+    {
+        draw_rmt_times[n] = draw_rmt_times[0];
+        n++;
+    }
+    printf("draw_rmt_times: ");
+    for (int x = 0; x < nb_rmt_times; x++)
+        printf(" %d ", draw_rmt_times[x]);
+    printf(" \n");
 
     if (disable_logging == 1)
         printf("logging disabled \n");
@@ -523,7 +570,9 @@ int main(int argc, char *argv[])
         printf("wifi enabled \n");
     else
         printf("wifi disabled \n");
+
 #ifdef __linux__
+    char *dir2 = "/pc_host_app/";
 
     sprintf(input_pipe, "%s%s", "/tmp/epdiy_pc_monitor_a_", display_id);
     sprintf(output_pipe, "%s%s", "/tmp/epdiy_pc_monitor_b_", display_id);
@@ -533,6 +582,7 @@ int main(int argc, char *argv[])
     mkfifo(output_pipe, 0666);
 
 #elif _WIN32
+    char *dir2 = "\\pc_host_app\\";
     sprintf(input_pipe, "%s%s", "\\\\.\\pipe\\epdiy_pc_monitor_a_", display_id);
     sprintf(output_pipe, "%s%s", "\\\\.\\pipe\\epdiy_pc_monitor_b_", display_id);
 
@@ -584,6 +634,18 @@ int main(int argc, char *argv[])
         fprintf(stderr, "socket() failed! %d\n", WSAGetLastError());
     }
 #endif
+    getcwd(working_dir, sizeof(working_dir));
+
+    sprintf(working_dir, "%s%s", working_dir, dir2);
+
+    DIR *dir = opendir(working_dir);
+    if (dir)
+    {
+        cd(working_dir);
+        closedir(dir);
+    }
+    getcwd(working_dir, sizeof(working_dir));
+    printf("current working directory is: %s\n", working_dir);
 
     int yes = 0; // 1 - on, 0 - off
     int result = setsockopt(socket_desc,
@@ -598,8 +660,6 @@ int main(int argc, char *argv[])
     server.sin_port = htons(3333);
     //Connect to remote server
 
-    getcwd(working_dir, sizeof(working_dir));
-    printf("current working directory is: %s\n", working_dir);
     if (wifi_on == 1)
     {
         if (connect(socket_desc, (struct sockaddr *)&server, sizeof(server)) < 0)

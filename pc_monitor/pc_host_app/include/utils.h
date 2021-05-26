@@ -5,10 +5,17 @@ uint32_t getTick();
 #if !defined(_WIN32)
 #define HANDLE int
 #define DWORD unsigned long
-#define LPDWORD *DWORD
+#define LPDWORD *DWORD.
+#define SOCKET int32_t
+#include "unistd.h"
+#define cwd getcwd
+#define cd chdir
 #endif
 #ifdef _WIN32
 #include <windows.h>
+#include <direct.h>
+#define cwd _getcwd
+#define cd _chdir
 #endif
 
 //Write an array to a file

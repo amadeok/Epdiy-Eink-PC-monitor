@@ -54,7 +54,7 @@ def draw_cursor_1bpp(conf, byte_string_raw):
     previous_pos = pos2
 
     p = pyautogui.position()
-    if not linux:
+    if linux:
         pos2 = pyautogui.position()
     elif windows: 
         pos = win32gui.GetCursorPos()
@@ -225,13 +225,24 @@ def generate_cursor():
 
 
 def draw_cursor(conf, sct_img):
-    global pos2
-    previous_pos = pos2
-    pos2 = pyautogui.position()
+
+
     x_offset = conf.x_offset
-    width_res2 = conf.width_res2
     y_offset = conf.y_offset
+
+    width_res = conf.width
+    height_res = conf.height
+    width_res2 = conf.width_res2
     height_res2 = conf.height_res2
+
+    global pos2; global cursor
+    previous_pos = pos2
+    
+    if linux:
+        pos2 = pyautogui.position()
+    elif windows: 
+        pos = win32gui.GetCursorPos()
+        pos2.x = pos[0]; pos2.y = pos[1]
 
     if pos2.x >= x_offset and pos2.x <= width_res2 and pos2.y >= y_offset and pos2.y <= height_res2:
         x_cursor = pos2.x - x_offset
@@ -267,7 +278,12 @@ def draw_cursor(conf, sct_img):
         sct_img.raw[linear_coor+(h*width_res*4)+offset:linear_coor +
                     (h*width_res*4)+offset+8] = byte_array_cursor[19]
         # print("inside")
-        if previous_pos.x != pos2.x and previous_pos.y != pos2.y:
-            return 1
-        else:
+        if previous_pos.x == pos2.x and previous_pos.y == pos2.y:
+            #print(f" not moved px {previous_pos.x}, cx {pos2.x}, py {previous_pos.y}, cy {pos2.y}")
             return 0
+        else:
+            #print(f" moved ::  px {previous_pos.x}, cx {pos2.x}, py {previous_pos.y}, cy {pos2.y}")
+            return 1
+    else:
+        #print(f"outside : pos2.x  {pos2.x } pos2.y  {pos2.y }")
+        return 0

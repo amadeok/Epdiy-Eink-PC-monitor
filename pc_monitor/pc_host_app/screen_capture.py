@@ -16,7 +16,6 @@ from multiprocessing import shared_memory, resource_tracker, Value
 from collections import namedtuple
 
 
-#generate_cursor()
 work_dir = f'{working_dir}'
 if os.path.isdir(work_dir):
     os.chdir(work_dir)
@@ -24,15 +23,6 @@ if os.path.isdir(work_dir):
 PID_list = []
 pid0 = os.getpid()
 PID_list.append(pid0)
-
-l = [0, 85, 170, 255]
-l1 = [0+10, 85+10, 170+10, 255+10]
-
-for x in range(4):
-    for y in range(4):
-        print(l[x] - l1[y])
-    print("\n")
-
 
 
 for u in range(nb_displays-1):
@@ -46,7 +36,7 @@ for u in range(nb_displays-1):
     
 if ctx.a.child_process == 0:
 
-    if pipe_output and start_process:
+    if pipe_output and ctx.a.start_cpp_process :
         ctx.shared_buffer[0:100] = bytearray(100)
         if windows:
             binary = "process_capture.exe"
@@ -71,6 +61,7 @@ if ctx.a.child_process == 0:
             f'{modes[display_list[x].mode]}',
             f'{display_list[x].selective_compression}',
             f'{display_list[x].nb_chunks}', 
+            f'{display_list[x].nb_draws}', 
             f'{display_list[x].do_full_refresh}', 
             f'{display_list[x].a.disable_logging}',
             f'{ctx.wifi_on}'])
@@ -95,7 +86,7 @@ def main_task(ctx):
 
     if pipe_output:
         fd1, fd0 = open_pipes(ctx)
-
+    generate_cursor()
     with mss.mss() as sct:
 
         while 1:
@@ -112,9 +103,12 @@ def main_task(ctx):
             sct_img = sct.grab(ctx.monitor) #capture screen
 
             #mouse_moved = draw_cursor(display_list[0], sct_img)
+
+            if ctx.pipe_bit_depth == 8:
+                mouse_moved = draw_cursor(display_list[0], sct_img)
+
             image_file = Image.frombytes(
                 "RGB", sct_img.size, sct_img.bgra, "raw", "RGBX")
-
             mode = get_val_from_shm(ctx.offset_variables.mode, 'i')    
 
             if mode ==  10: ctx.pipe_bit_depth = 8
@@ -170,26 +164,31 @@ def main_task(ctx):
             elif mode == 10: # 4 shades grayscale mode
 
                 image_file = convert_to_greyscale_and_enhance(image_file, ctx, ctx.offset_variables)
-                
 
                 # dith.quantize_(np_arr,  np_arr, ctx.width*ctx.height)
                 #image_file = Image.frombytes('L', sct_img.size, np_arr)
 
             else:
                 print("error?")
-            """             image_file = image_file.transpose(Image.FLIP_TOP_BOTTOM) #flip the image so that the first bytes contain the pixel data of the first lines
-                        if ctx.rotation != 0:
-                            image_file   = image_file.rotate(ctx.rotation,  expand=True) """
+            if mode != 10:
+                image_file = image_file.transpose(Image.FLIP_TOP_BOTTOM) #flip the image so that the first bytes contain the pixel data of the first lines
+            if ctx.rotation != 0:
+                image_file   = image_file.rotate(ctx.rotation,  expand=True)
 
             if enable_raw_output: 
                 raw_data = get_raw_pixels(
                     image_file, raw_output_file, save_raw_file, ctx.switcher) #remove bitmap pad bytes
             if save_bmp:
-                image_file.save(ctx.complete_output_file)
+                image_file2 = image_file.copy()
+                if mode != 10:
+                    image_file2 = image_file2.transpose(Image.FLIP_TOP_BOTTOM) #flip the image so that the first bytes contain the pixel data of the first lines
+                if ctx.rotation != 0:
+                    image_file2   = image_file2.rotate(ctx.rotation,  expand=True)
+                image_file2.save(ctx.complete_output_file)
             if pipe_output:  # and dif_list_sum
-                mouse_moved = draw_cursor_1bpp(display_list[0], raw_data[0])
                 
                 if ctx.pipe_bit_depth == 1:
+                    mouse_moved = draw_cursor_1bpp(display_list[0], raw_data[0])
                     pipe_output_f(raw_data, ctx.eight_bpp, mouse_moved, fd1, fd0)  # 1bpp->raw_data[0]
                 elif ctx.pipe_bit_depth == 8:
                     pipe_output_f(raw_data, None, mouse_moved, fd1, fd0) 

@@ -34,11 +34,10 @@ display_conf = []
 
 save_raw_file = 0
 open_from_disk = 0
-start_process = 0
 save_chunck_files = 0
 pipe_output = 1
 enable_raw_output = 1
-save_bmp = 1
+save_bmp = 0
 check_for_difference_esp = 1
 working_dir = os.getcwd()
 raw_output_file = f"{working_dir}/image_mode_raw"
@@ -69,12 +68,15 @@ def eval_args(self):
     if "child" in sys.argv:
         self.child_process = 1; sys.argv.remove("child")
     else: self.child_process = 0
-    if "-disable_wifi" in sys.argv:
-        self.disable_wifi = 1; sys.argv.remove("-disable_wifi")
+    if "dw" in sys.argv:
+        self.disable_wifi = 1; sys.argv.remove("dw")
     else: self.disable_wifi = 0
     if "-common" in sys.argv: 
         self.common = 1; sys.argv.remove("-common")
     else: self.common = 0
+    if "dp" in sys.argv: 
+        self.start_cpp_process = 0; sys.argv.remove("dp")
+    else: self.start_cpp_process  = 1
     nb_arg = len(sys.argv)
     nb_displays = nb_arg -1
     return nb_displays
@@ -154,7 +156,6 @@ class display_settings(object):
         self.monitor = {"top": self.y_offset, "left": self.x_offset,  "width": self.width, "height": self.height} 
 
         self.byte_string_list = [bytearray([1] * 1*1), bytearray(b'\x00')]
-        self.pipe_settings = bytearray(b'\x00\x00\x00')
 
         self.dif_list_sum = 0
         self.switcher = 0
@@ -169,14 +170,36 @@ class display_settings(object):
             self.pipe_bit_depth = 8
             self.eight_bpp = np.full((self.width, self.height), 255, dtype=np.uint8)
             self.byte_string_list = [self.eight_bpp, self.eight_bpp]
+            self.nb_draws = 3
+            self.framebuffer_cycles = 2
+
 
 
         else: 
             self.nb_chunks = 5
             self.pipe_bit_depth = 1
             self.eight_bpp = None
+            self.nb_draws = 1
+            
+        if self.nb_draws> self.framebuffer_cycles: 
+            self.nb_rmt_times = self.nb_draws
+        else: self.nb_rmt_times = self.framebuffer_cycles
+        self.pipe_settings = bytearray(b'\x00\x00\x00')
+        self.draw_rmt_times = self.rmt_high_time.split(':')
 
+        for q in range(len(self.draw_rmt_times)):
+            self.draw_rmt_times[q] = int(self.draw_rmt_times[q]);
+            if q < self.nb_rmt_times:
+                self.pipe_settings += self.draw_rmt_times[q].to_bytes(2, 'little')
+        if len(self.draw_rmt_times) < self.nb_rmt_times:
+            print("Warning: not enough rmt high times for each framebuffer cycle have been specified")
+            dif = self.nb_rmt_times - len(self.draw_rmt_times)
+            for w in range(dif):
+                self.draw_rmt_times.append(self.draw_rmt_times[0]);
+                if q < self.nb_rmt_times:
+                    self.pipe_settings += self.draw_rmt_times[0].to_bytes(2, 'little')
 
+        self.pipe_settings_size = len(self.pipe_settings)
 
         #self.check_resize()
 
@@ -184,7 +207,6 @@ class display_settings(object):
         else: self.wifi_on = 1
         setup_shared_memory(self)
         self.mode = read_dither_method(self)
-
         
 def read_file(conf_file):
     display_conf = []
@@ -386,6 +408,11 @@ def pipe_output_f(raw_files, np_image_file, mouse_moved, fd1, fd0):
     #print(ctx.pipe_settings[2])
     if linux: os.write(fd0, ctx.pipe_settings)
     elif windows: win32file.WriteFile(fd0, ctx.pipe_settings)
+    # x = 0
+    # while x < ctx.nb_rmt_times:
+    #     oribyte = int.from_bytes(ctx.pipe_settings[x*2+3:x*2+2+3], 'little')
+    #     print(oribyte)
+    #     x+=1
 
     if check_for_difference_esp == 1:
         check_for_difference_esp_fun(raw_files[2])
@@ -614,7 +641,7 @@ def smart_invert(image_file):
     if n < get_val_from_shm(ctx.offset_variables.invert_threshold, 'i'):
         image_file = ImageOps.invert(image_file)
         inv = 1
-    if n > 1 and n < 174 and  get_val_from_shm(ctx.offset_variables.fill_blacks, 'i') == 0:
+    if n > 1 and n < 255 and  get_val_from_shm(ctx.offset_variables.fill_blacks, 'i') == 0:
         image_file = select_inv(image_file, 15, 15, 80)   # good 15, 15, 80 
     #print("###", int(n), inv, inv2)
     return image_file

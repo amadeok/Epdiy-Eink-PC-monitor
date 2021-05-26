@@ -4,10 +4,13 @@
 #include <cstdlib>
 #include <stdio.h>
 #include <unistd.h>
+#include <iostream>
+#include <string>
 
 extern int total_nb_pixels, refres_every_x_frames, nb_draws;
 extern char working_dir[256];
-;
+int debug_grayscale = 1;
+
 int loop_counter0 = 1, loop_counter1 = 0;
 
 void *generate_eink_framebuffer_v1(unsigned char *source_1bpp, char *padded_2bpp_framebuffer_current, char *padded_2bpp_framebuffer_previous, char *eink_framebuffer)
@@ -58,9 +61,9 @@ void generate_eink_framebuffer_v2(char *source_8bpp_current, char *source_8bpp_p
 
         for (int x = 0; x < nb_draws; x++)
             memset(eink_framebuffer[x], 0, total_nb_pixels / 4);
-        memset(source_8bpp_previous, 255, total_nb_pixels);
-        array_to_file(source_8bpp_current, total_nb_pixels, working_dir, "source_8bpp_current", 0);
-        array_to_file(source_8bpp_previous, total_nb_pixels, working_dir, "source_8bpp_previous", 0);
+        //memset(source_8bpp_previous, 255, total_nb_pixels);
+        // array_to_file(source_8bpp_current, total_nb_pixels, working_dir, "source_8bpp_current", 0);
+        //array_to_file(source_8bpp_previous, total_nb_pixels, working_dir, "source_8bpp_previous", 0);
         unsigned char temp_mask = 0;
         unsigned char temp_masks[4];
         int cur = 0, prev = 0;
@@ -76,7 +79,7 @@ void generate_eink_framebuffer_v2(char *source_8bpp_current, char *source_8bpp_p
 
                 cur = (uint8_t)source_8bpp_current[counter + y];
                 prev = (uint8_t)source_8bpp_previous[counter + y];
-                if (counter +y == 50)
+                if (counter + y == 50)
                     n = 0;
                 //n = (uint8_t)source_8bpp_previous[counter + y] - (uint8_t)source_8bpp_current[counter + y];
                 switch (cur)
@@ -170,8 +173,11 @@ void generate_eink_framebuffer_v2(char *source_8bpp_current, char *source_8bpp_p
         {
             array_to_file(eink_framebuffer[k], 230400, working_dir, "eink_framebuffer", k);
         }
+        std::string filename = "/home/amadeok/epdiy-working/examples/pc_monitor/pc_host_app/rebuild_fb_rgb.py";
+        std::string command = "python3 ";
+        command += filename;
+        system(command.c_str());
     }
-    //     array_to_file(eink_framebuffer, 230400, working_dir, "eink_framebuffer", 0);
 }
 
 void quantize(char *source_8bpp_current, char *source_8bpp_modified_current, int size)
