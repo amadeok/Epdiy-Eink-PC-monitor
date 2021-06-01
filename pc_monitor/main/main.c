@@ -36,10 +36,6 @@
 #define MULTITASK 0
 #define FT245MODE 0
 
-struct context ctx;
-
-
-#define DEBUG_MSGs 1
 #define PORT 3333
 int buf_size;
 int sock = 0;
@@ -81,15 +77,12 @@ static esp_err_t event_handler(void *ctx, system_event_t *event)
   return ESP_OK;
 }
 
-void init_memory(struct context ctx)
+void init_memory()
 {
-  int nb_chunks = ctx.nb_chunks;
-  int chunk_size = ctx.chunk_size;
-  int extra_bytes = ctx.extra_bytes;
   printf("sizes %d \n", chunk_size + extra_bytes);
   if (nb_chunks > 0)
     fc0 = (uint8_t *)heap_caps_malloc((chunk_size + extra_bytes) * sizeof(uint8_t), MALLOC_CAP_SPIRAM);
-  if (nb_chunks > 1)
+  if (nb_chunks > 1 || esp32_multithread >= 1)
     fc1 = (uint8_t *)heap_caps_malloc((chunk_size + extra_bytes) * sizeof(uint8_t), MALLOC_CAP_SPIRAM);
   if (nb_chunks > 2)
     fc2 = (uint8_t *)heap_caps_malloc((chunk_size + extra_bytes) * sizeof(uint8_t), MALLOC_CAP_SPIRAM);
@@ -108,11 +101,8 @@ void init_memory(struct context ctx)
   if (nb_chunks > 9)
     fc9 = (uint8_t *)heap_caps_malloc((chunk_size + extra_bytes) * sizeof(uint8_t), MALLOC_CAP_SPIRAM);
 }
-void free_memory(struct context ctx)
+void free_memory()
 {
-  int nb_chunks = ctx.nb_chunks;
-  int chunk_size = ctx.chunk_size;
-
   if (nb_chunks > 0)
     heap_caps_free(fc0);
   if (nb_chunks > 1)
@@ -133,7 +123,41 @@ void free_memory(struct context ctx)
     heap_caps_free(fc8);
   if (nb_chunks > 9)
     heap_caps_free(fc9);
+
+  heap_caps_free(compressed_chunk);
+  heap_caps_free(chunk_lenghts);
+  heap_caps_free(chunk_lenghts_int);
+  heap_caps_free(line_changed);
+  heap_caps_free(total_lines_changed);
+  heap_caps_free(draw_rmt_times);
+  heap_caps_free(per_frame_wifi_settings);
 }
+
+void check_conc()
+{
+  while (1)
+  {
+    if (downloader_busy == 1 && renderer_busy == 1)
+      printf("###################### busys %d, %d ########################\n ", downloader_busy, renderer_busy);
+    vTaskDelay(2 / portTICK_PERIOD_MS);
+  }
+}
+
+int end_session()
+{
+  printf("Powering off Epdiy board \n ");
+  free_memory();
+  mirroring_active = false;
+  epd_poweroff();
+  stop = 1;
+  for (int g = 0; g < 2; g++)
+  {
+    busy[g] = 0;
+    clear[g] = 0;
+  }
+  return -1;
+}
+
 // Main task
 tcpip_adapter_ip_info_t wifi_task(void *pvParameter)
 {
@@ -156,7 +180,7 @@ tcpip_adapter_ip_info_t wifi_task(void *pvParameter)
   // while (1)
   //  vTaskDelay(4000 / portTICK_PERIOD_MS);
 }
-void rle_extract1(int compressed_size, uint8_t *decompressed_ptr, uint8_t *compressed, struct context ctx)
+void rle_extract1(int compressed_size, uint8_t *decompressed_ptr, uint8_t *compressed)
 {
   if (compressed == NULL)
     printf("compress NULL\n");
@@ -238,7 +262,7 @@ void power_on_driver()
   vTaskDelay(300 / portTICK_PERIOD_MS);
 }
 
-int send_compressed(int compressed_size, struct context ctx) // for debugging
+int send_compressed(int compressed_size) // for debugging
 {
 
   int buf_size = 4096 * 5;
@@ -254,7 +278,7 @@ int send_compressed(int compressed_size, struct context ctx) // for debugging
   return tott;
 }
 
-int send_decompressed(uint8_t *decompressed_chunck, struct context ctx) // for debugging
+int send_decompressed(uint8_t *decompressed_chunck) // for debugging
 {
   int buf_size2 = 4096 * 5, tot = 0, len = 0;
   do
@@ -262,15 +286,15 @@ int send_decompressed(uint8_t *decompressed_chunck, struct context ctx) // for d
     len = send(sock, decompressed_chunck + tot, buf_size2, 0);
     //  printf("len %d, tot %d\n", len, tot);
     tot += len;
-    if (ctx.chunk_size - tot < 4096 * 6)
+    if (chunk_size - tot < 4096 * 6)
     {
-      buf_size2 = ctx.chunk_size - tot;
+      buf_size2 = chunk_size - tot;
     }
-  } while (tot < ctx.chunk_size);
+  } while (tot < chunk_size);
   return tot;
 }
 
-void print_values(int tot, struct context ctx) // for debugging
+void print_values(int tot) // for debugging
 {
   for (int h = 0; h < 10; h++)
     printf("%03d", compressed_chunk[tot + h]);
@@ -281,110 +305,142 @@ void print_values(int tot, struct context ctx) // for debugging
   printf("\n");
 }
 
-struct context set_download_pointer(int chunk_number, struct context ctx)
+int set_download_pointer(int chunk_number, int which_buffer[1])
 {
-  if (chunk_lenghts_int[chunk_number] > ctx.chunk_size / 100 * ctx.selective_compression && ctx.selective_compression != 0)
+  int buf = chunk_number;
+  if (esp32_multithread == 2)
   {
-    where_to_download = get_current_chunk_ptr(chunk_number, ctx);
-    ctx.download_size = ctx.chunk_size;
+    while (downloader_frame_counter - renderer_frame_counter > 1)
+    {
+      // which_buffer[0] = switch_framebuffer(which_buffer[0]);
+      vTaskDelay(3 / portTICK_PERIOD_MS);
+      //    printf("downloader waiting %d, \n", busy[current_buffer]);
+    }
+    buf = back_buffer();
+  }
+  else
+    buf = chunk_number;
+
+#if DEBUG_MGSs == 2
+  printf("set_download_pointer current_buffer  %d\n", current_buffer);
+#endif
+
+  if (chunk_lenghts_int[chunk_number] > chunk_size / 100 * selective_compression && selective_compression != 0)
+  {
+    where_to_download = get_current_chunk_ptr(buf);
+    download_size = chunk_size;
 #if DEBUG_MSGs == 1
     printf("receving uncompressed framebuffer %d\n", chunk_lenghts_int[chunk_number]);
 #endif
-    ctx.need_to_extract = 0;
+    need_to_extract = 0;
   }
   else
   {
     where_to_download = compressed_chunk;
-    ctx.download_size = chunk_lenghts_int[chunk_number];
+    download_size = chunk_lenghts_int[chunk_number];
 #if DEBUG_MSGs == 1
-    printf("receving compressed framebuffer %d\n", ctx.download_size);
+    printf("receving compressed framebuffer %d\n", download_size);
 #endif
-    ctx.need_to_extract = 1;
+    need_to_extract = 1;
   }
-  return ctx;
-  //  printf("where_to_download %p, download_size %d\n", where_to_download, ctx.download_size);
+
+  if (esp32_multithread && need_to_refresh)
+  {
+#if DEBUG_MSGs == 2
+    printf("###### where_to_download:  %p\n", where_to_download);
+#endif
+    where_to_download[chunk_size + extra_bytes - 1] = need_to_refresh;
+  }
+
+  return need_to_extract;
+  //  printf("where_to_download %p, download_size %d\n", where_to_download, download_size);
+}
+int N = 0;
+
+void ch()
+{
+  if (heap_caps_check_integrity_all(true) == 1)
+    ESP_LOGI(TAG, "Checking heap integrity: OK fun %d", N);
+  else
+    ESP_LOGI(TAG, "Heap is corrupted fun %d", N);
+  N++;
 }
 
-static void download_and_extract(const int sock, struct context ctx)
+static void download_and_extract(const int sock)
+
 {
-  ctx.mirroring_active = true;
+  mirroring_active = true;
+  int which_buffer[1];
+  downloader_frame_counter = 0;
+  stop = 0;
+  if (esp32_multithread == 2)
+    xSemaphoreGive(begin);
+
   while (1)
   {
-    // printf("download_and_extract \n");
+    printf("download_and_extract\n");
+
     int len = 0, tot = 0, compressed_size, buf_size = 4096 * 5;
     int delta = 0;
-    ctx.downloader_chunk_counter = 0;
+    downloader_chunk_counter = 0;
     send(sock, "ready0", 6, 0);
-    //printf("per_frame_wifi_settings \n");
+    recv(sock, per_frame_wifi_settings, per_frame_wifi_settings_size, 0);
+    send(sock, per_frame_wifi_settings, per_frame_wifi_settings_size, 0);
+    memcpy(draw_rmt_times, per_frame_wifi_settings + 6, nb_rmt_times * sizeof(int16_t));
+    mode = per_frame_wifi_settings[1];
 
-    recv(sock, per_frame_wifi_settings, ctx.per_frame_wifi_settings_size, 0);
-    send(sock, per_frame_wifi_settings, ctx.per_frame_wifi_settings_size, 0);
-    memcpy(draw_rmt_times, per_frame_wifi_settings + 6, ctx.nb_draws * 2);
 #if DEBUG_MSGs == 1
+    printf("mode: %d\n", mode);
     printf("rmt high times: ");
-
-    for (int l = 0; l < ctx.nb_draws; l++)
+    for (int l = 0; l < nb_rmt_times; l++)
       printf(" %d ", draw_rmt_times[l]);
     printf("\n");
 #endif
 
     if (per_frame_wifi_settings[0] == 'm')
-      ctx.mouse_moved = 1;
+      mouse_moved = 1;
     else
-      ctx.mouse_moved = 0;
-    if (per_frame_wifi_settings[1] == 'p')
-      ctx.pseudo_greyscale_mode = 1;
-    else
-      ctx.pseudo_greyscale_mode = 0;
-    if (per_frame_wifi_settings[2] != 0)
-    {
-      printf("clearing with delay %d\n", per_frame_wifi_settings[2]);
-      epd_clear();
-      vTaskDelay(per_frame_wifi_settings[2] / portTICK_PERIOD_MS);
-    }
+      mouse_moved = 0;
+
     //printf("per_frame_wifi_settings 2 \n");
 
-    recv(sock, chunk_lenghts, ctx.nb_chunks * 4, 0);
-
-    for (int a = 0; a < ctx.nb_chunks; a++)
+    recv(sock, chunk_lenghts, nb_chunks * 4, 0);
+    for (int a = 0; a < nb_chunks; a++)
     {
       memcpy(chunk_lenghts_int + (a * 1), chunk_lenghts + a * 4, 4 * sizeof(uint8_t));
-      // chunk_lenghts_int[a] = chunk_lenghts[(a * 2)] | chunk_lenghts[(a * 2) + 1] << 8;
-      // printf(" %d %d ", chunk_lenghts[(a*2)], chunk_lenghts[(a*2)+1]);
 #if DEBUG_MSGs == 1
       printf(" %d ", chunk_lenghts_int[a]);
-      if (a == ctx.nb_chunks)
+      if (a == nb_chunks)
         printf("\n");
 #endif
-      //    printf(" %d ", chunk_lenghts_int[a]);
     }
-    //   printf("\n");
     long time1 = xTaskGetTickCount();
-    //printf("per_frame_wifi_settings 4 \n");
 
-    recv(sock, line_changed, ctx.height_resolution + 2, 0);
-    //printf("per_frame_wifi_settings 5\n");
+    recv(sock, line_changed, height_resolution + 2, 0);
 
     int total = 0;
-    //  long time2 = xTaskGetTickCount();
 
-    // for (int h = 0; h < ctx.height_resolution; h++)
-    // total += ctx.line_changed[h];
+    prev_total_lines_changed = total_lines_changed[0];
+    memcpy(total_lines_changed, line_changed + height_resolution, 2);
 
-    ctx.prev_total_lines_changed = total_lines_changed[0];
+    need_to_extract = set_download_pointer(0, which_buffer);
 
-    memcpy(total_lines_changed, line_changed + ctx.height_resolution, 2);
-    // printf("line changed %d, prev_total_lines_changed %d, 3rd %d \n", ctx.total_lines_changed[0], ctx.prev_total_lines_changed);
-
-    ctx = set_download_pointer(0, ctx);
-
-    //  compressed_size = chunk_lenghts_int[0];
-    // printf("cs0 %d \n", compressed_size);
-
-    if (ctx.download_size < buf_size)
+    if (per_frame_wifi_settings[2] != 0)
     {
-      buf_size = ctx.download_size;
+      int delay = per_frame_wifi_settings[2];
+      printf("d clearing with delay %d\n", delay);
+      if (esp32_multithread == 0)
+        epd_clear();
+      else
+        clear[back_buffer()] = per_frame_wifi_settings[2];
+      vTaskDelay(delay / portTICK_PERIOD_MS);
     }
+
+
+    if (download_size < buf_size)
+      buf_size = download_size;
+
+    downloader_busy = 1;
 
     do
     {
@@ -397,57 +453,53 @@ static void download_and_extract(const int sock, struct context ctx)
       if (len < 0)
         break;
 
-      if (ctx.download_size - tot < 4096 * 6)
+      if (download_size - tot < 4096 * 6)
       {
-        buf_size = ctx.download_size - tot;
+        buf_size = download_size - tot;
       }
-    } while (tot < ctx.download_size);
+    } while (tot < download_size);
     //printf("per_frame_wifi_settings 8\n");
-
     if (len < 0)
-    {
-      printf("Powering off Epdiy board \n ");
-      free_memory(ctx);
-      ctx.mirroring_active = false;
-      epd_poweroff();
-      break;
-    }
+      if (end_session() == -1)
+        break;
+
 #if DEBUG_MSGs == 1
     printf("tot %d \n", tot);
 #endif
 
-#if MULTITASK == 0
-    if (ctx.need_to_extract == 1)
-      rle_extract1(ctx.download_size, get_current_chunk_ptr(0, ctx), where_to_download, ctx);
-#else
-    printf("current_buffer %d \n", ctx.current_buffer);
-    if (chunk_lenghts_int[0] < ctx.chunk_size / 10 * 3)
+    if (esp32_multithread == 0)
     {
-      if (ctx.need_to_extract == 1)
-        rle_extract1(ctx.download_size, get_current_chunk_ptr(0, ctx), where_to_download, ctx);
-      else if (ctx.current_buffer == 1)
-        rle_extract1(ctx.download_size, ctx.second_framebuffer, where_to_download, ctx);
+      if (need_to_extract == 1)
+        rle_extract1(download_size, get_current_chunk_ptr(0), where_to_download);
+    }
+    else
+    {
+      printf("d current_buffer %d \n", current_buffer);
+      if (need_to_extract == 1)
+        rle_extract1(download_size, get_current_chunk_ptr(current_buffer), where_to_download);
     }
 
-#endif
     //   delta = xTaskGetTickCount() - time2;
     //  printf("extracting took : %d ", delta);
-    ctx.downloader_chunk_counter++;
-    //printf("down cc %d \n", ctx.downloader_chunk_counter);
+    downloader_chunk_counter++;
+    downloader_frame_counter++;
+    downloader_busy = 0;
+    busy[current_buffer] = 0;
 
-    for (int h = 0; h < ctx.nb_chunks - 1; h++)
+#if DEBUG_MSGs == 2
+    printf("down cc %d, fc %lu \n", downloader_chunk_counter, downloader_frame_counter);
+#endif
+
+    for (int h = 0; h < nb_chunks - 1; h++)
     {
-      // printf("D renderer %d downloader %d\n", ctx.renderer_chunk_counter, ctx.downloader_chunk_counter);
+      // printf("D renderer %d downloader %d\n", renderer_chunk_counter, downloader_chunk_counter);
       tot = 0;
       len = 0;
       buf_size = 4096 * 5;
-      ctx = set_download_pointer(h + 1, ctx);
+      need_to_extract = set_download_pointer(h + 1, which_buffer);
 
-      // compressed_size = chunk_lenghts_int[h + 1];
-      //   printf("cs%d %d \n", h + 1, compressed_size);
-
-      if (ctx.download_size < buf_size)
-        buf_size = ctx.download_size;
+      if (download_size < buf_size)
+        buf_size = download_size;
 
       do
       {
@@ -460,118 +512,138 @@ static void download_and_extract(const int sock, struct context ctx)
         if (len < 0)
           break;
 
-        if (ctx.download_size - tot < 4096 * 6)
+        if (download_size - tot < 4096 * 6)
         {
-          buf_size = ctx.download_size - tot;
+          buf_size = download_size - tot;
         }
-      } while (tot < ctx.download_size);
+      } while (tot < download_size);
 #if DEBUG_MSGs == 1
       printf("tot %d \n", tot);
 #endif
       if (len < 0)
-      {
-        ctx.mirroring_active = false;
-        printf("Powering off Epdiy board \n ");
-        free_memory(ctx);
-        epd_poweroff();
-        break;
-      }
-      if (ctx.need_to_extract == 1)
-        rle_extract1(ctx.download_size, get_current_chunk_ptr(h + 1, ctx), where_to_download, ctx);
+        if (end_session() == -1)
+          break;
 
-      ctx.downloader_chunk_counter++;
-      //    printf("down cc %d \n", ctx.downloader_chunk_counter);
+      if (need_to_extract == 1)
+        rle_extract1(download_size, get_current_chunk_ptr(h + 1), where_to_download);
+      downloader_chunk_counter++;
+#if DEBUG_MSGs == 2
+      printf("down cc %d, fc %lu \n", downloader_chunk_counter, downloader_frame_counter);
+#endif
     }
 
     printf("Download and extract took : %lu\n", xTaskGetTickCount() - time1);
-#if MULTITASK == 0
-    //   if (enable_skipping == 1)
-    pc_monitor_feed_display_with_skip(total_lines_changed[0], ctx.prev_total_lines_changed, ctx);
-    //  else
-    //    pc_monitor_feed_display(ctx.total_lines_changed[0], ctx.prev_total_lines_changed);
-#endif
-    ctx.frame_counter++;
+
+    if (esp32_multithread == 0)
+      pc_monitor_feed_display_with_skip(total_lines_changed[0]);
+
+    frame_counter++;
+    if (downloader_frame_counter == 100)
+      downloader_frame_counter = 0;
+    if (frame_counter == nb_draws)
+      frame_counter = 0;
   }
 }
-struct context receive_settings(const int sock, struct context ctx)
+void receive_settings(const int sock)
 {
   printf("Receiving settings.. \n");
   int8_t settings_size[1];
+  ch();
   recv(sock, settings_size, 1, 0);
   printf("settings_size %d \n", settings_size[0]);
-  ctx.settings = (uint16_t *)calloc(settings_size[0], sizeof(uint16_t));
-
-  int ret = recv(sock, ctx.settings, settings_size[0], 0);
+  ch();
+  settings = (uint16_t *)calloc(settings_size[0], sizeof(uint16_t));
+  ch();
+  int ret = recv(sock, settings, settings_size[0], 0);
   printf("### Settings ### %d \n", ret);
-  printf("framebuffer_cycles %d \n", ctx.framebuffer_cycles = ctx.settings[0]);
-  printf("rmt_high_time %d \n", ctx.rmt_high_time = ctx.settings[1]);
-  printf("enable_skipping %d \n", ctx.enable_skipping = ctx.settings[2]);
-  printf("epd_skip_threshold %d \n", ctx.epd_skip_threshold = ctx.settings[3]);
-  //printf("epd_skip_mouse_only %d \n", epd_skip_mouse_only = ctx.settings[4]);
+  printf("framebuffer_cycles %d \n", framebuffer_cycles = settings[0]);
+  // printf("rmt_high_time %d \n", rmt_high_time = settings[1]);
+  printf("enable_skipping %d \n", enable_skipping = settings[2]);
+  printf("epd_skip_threshold %d \n", epd_skip_threshold = settings[3]);
+  printf("esp32_multithread %d \n", esp32_multithread = settings[4]);
 
-  printf("framebuffer_cycles_2 %d \n", ctx.framebuffer_cycles_2 = ctx.settings[5]);
-  printf("framebuffer_cycles_2_threshold %d \n", ctx.framebuffer_cycles_2_threshold = ctx.settings[6]);
-  printf("pseudo_greyscale_mode %d \n", ctx.pseudo_greyscale_mode = ctx.settings[7]);
-  printf("selective_compression %d \n", ctx.selective_compression = ctx.settings[8]);
-  printf("nb_chunks %d \n", ctx.nb_chunks = ctx.settings[9]);
-  printf("nb_draws %d \n", ctx.nb_draws = ctx.settings[10]);
-  printf("per_frame_wifi_settings_size %d \n", ctx.per_frame_wifi_settings_size = ctx.settings[11]);
+  printf("framebuffer_cycles_2 %d \n", framebuffer_cycles_2 = settings[5]);
+  printf("framebuffer_cycles_2_threshold %d \n", framebuffer_cycles_2_threshold = settings[6]);
+  //printf("pseudo_greyscale_mode %d \n", pseudo_greyscale_mode = settings[7]);
+  printf("selective_compression %d \n", selective_compression = settings[8]);
+  printf("nb_chunks %d \n", nb_chunks = settings[9]);
+  printf("nb_draws %d \n", nb_draws = settings[10]);
+  printf("per_frame_wifi_settings_size %d \n", per_frame_wifi_settings_size = settings[11]);
 
+  if (nb_draws > framebuffer_cycles)
+    nb_rmt_times = nb_draws;
+  else
+    nb_rmt_times = framebuffer_cycles;
+
+  printf("nb_rmt_times %d \n", nb_rmt_times);
   printf("################# \n");
   // already_got_settings = true;
-  ctx.width_resolution = EPD_WIDTH;
-  ctx.height_resolution = EPD_HEIGHT;
-  printf("w %d %d, h %d %d, \n", ctx.width_resolution, ctx.height_resolution, EPD_WIDTH, EPD_HEIGHT);
-  ctx.total_nb_pixels = ctx.width_resolution * ctx.height_resolution;
-  ctx.eink_framebuffer_size = ctx.total_nb_pixels / 4;
-  ctx.chunk_size = (ctx.eink_framebuffer_size / ctx.nb_chunks);
-  ctx.nb_rows_per_chunk = ctx.height_resolution / ctx.nb_chunks;
-  ctx.extra_bytes = 200000 / ctx.nb_chunks;
+  width_resolution = EPD_WIDTH;
+  height_resolution = EPD_HEIGHT;
+  printf("w %d %d, h %d %d, \n", width_resolution, height_resolution, EPD_WIDTH, EPD_HEIGHT);
+  total_nb_pixels = width_resolution * height_resolution;
+  eink_framebuffer_size = total_nb_pixels / 4;
+  chunk_size = (eink_framebuffer_size / nb_chunks);
+  nb_rows_per_chunk = height_resolution / nb_chunks;
+  extra_bytes = 200000 / nb_chunks;
   //  int free_mem = esp_get_free_heap_size();
   // ESP_LOGI(TAG, "free memory %d ", free_mem);
+  ch();
 
-  compressed_chunk = (uint8_t *)heap_caps_malloc(ctx.chunk_size, MALLOC_CAP_SPIRAM);
+  compressed_chunk = (uint8_t *)heap_caps_malloc(chunk_size, MALLOC_CAP_SPIRAM);
   chunk_lenghts = (uint8_t *)heap_caps_malloc(64, MALLOC_CAP_SPIRAM);
-  chunk_lenghts_int = (int32_t *)heap_caps_malloc(ctx.nb_chunks * 64, MALLOC_CAP_SPIRAM);
-  line_changed = (uint8_t *)heap_caps_malloc(ctx.height_resolution + 2, MALLOC_CAP_SPIRAM);
+  chunk_lenghts_int = (int32_t *)heap_caps_malloc(nb_chunks * 64, MALLOC_CAP_SPIRAM);
+  line_changed = (uint8_t *)heap_caps_malloc(height_resolution + 2, MALLOC_CAP_SPIRAM);
   total_lines_changed = (int16_t *)heap_caps_malloc(2, MALLOC_CAP_SPIRAM);
-  draw_rmt_times = (uint16_t *)heap_caps_malloc(2, MALLOC_CAP_SPIRAM);
-  per_frame_wifi_settings = (uint8_t *)heap_caps_malloc(ctx.per_frame_wifi_settings_size, MALLOC_CAP_SPIRAM);
-  // ctx.compressed_chunk = compressed_chunk;
-  // ctx.chunk_lenghts = chunk_lenghts;
-  // ctx.chunk_lenghts_int = chunk_lenghts_int;
-  // ctx.line_changed = line_changed;
-  // ctx.total_lines_changed = total_lines_changed;
+  draw_rmt_times = (uint16_t *)heap_caps_malloc(nb_rmt_times * sizeof(uint16_t), MALLOC_CAP_SPIRAM);
+  per_frame_wifi_settings = (uint8_t *)heap_caps_malloc(per_frame_wifi_settings_size, MALLOC_CAP_SPIRAM);
 
-  if (total_lines_changed == NULL)
-    printf("total_lines_changed null\n");
-  if (line_changed == NULL)
-    printf("line_changed null\n");
-  // framebuffer_chunks = (uint8_t **)calloc(ctx.nb_chunks, sizeof(uint8_t));
-  init_memory(ctx);
+  ch();
 
-  for (int g = 0; g < ctx.nb_chunks; g++)
+  init_memory();
+
+  ch();
+
+  for (int g = 0; g < nb_chunks; g++)
   {
-    // framebuffer_chunks[g] = (uint8_t *)heap_caps_malloc(ctx.chunk_size + 10000, MALLOC_CAP_SPIRAM);
-    //   memset(framebuffer_chunks[g], 0, ctx.chunk_size + 10000);
-    if (get_current_chunk_ptr(g, ctx) == NULL)
+    // framebuffer_chunks[g] = (uint8_t *)heap_caps_malloc(chunk_size + 10000, MALLOC_CAP_SPIRAM);
+    //   memset(framebuffer_chunks[g], 0, chunk_size + 10000);
+    if (get_current_chunk_ptr(g) == NULL)
       ESP_LOGI(TAG, "ptr %d is null ", g);
     //else
-    // ESP_LOGI(TAG, "ptr %p: ", get_current_chunk_ptr(g, ctx));
+    // ESP_LOGI(TAG, "ptr %p: ", get_current_chunk_ptr(g));
   }
   //free_mem = esp_get_free_heap_size();
   //ESP_LOGI(TAG, "free memory %d ", free_mem);
-  if (heap_caps_check_integrity_all(true) == 1)
-    ESP_LOGI(TAG, "Checking heap integrity: OK ");
-  else
-    ESP_LOGI(TAG, "Heap is corrupted");
+  ch();
 
-  ESP_LOGI(TAG, "nb_chunks %d, nb_rows_chunks %d, chunk_size %d, eink_framebuffer_size %d, chunk_size+extra_bytes %d", ctx.nb_chunks, ctx.nb_rows_per_chunk, ctx.chunk_size, ctx.eink_framebuffer_size, ctx.chunk_size + ctx.extra_bytes);
-  memset(line_changed, 0, ctx.height_resolution + 2);
-  return ctx;
+  ESP_LOGI(TAG, "nb_chunks %d, nb_rows_chunks %d, chunk_size %d, eink_framebuffer_size %d, chunk_size+extra_bytes %d", nb_chunks, nb_rows_per_chunk, chunk_size, eink_framebuffer_size, chunk_size + extra_bytes);
+  memset(line_changed, 0, height_resolution + 2);
+
+  xTaskCreatePinnedToCore(&check_conc, "check_conc", 10000, NULL, 5, NULL, 0);
+
+  if (esp32_multithread == 2)
+  {
+    zero_sema = xSemaphoreCreateBinary();
+    one_sema = xSemaphoreCreateBinary();
+
+    begin = xSemaphoreCreateBinary();
+
+    for (int x = 0; x < 2; x++)
+    {
+      semas[x] = xSemaphoreCreateBinary();
+      if (semas[x] == NULL)
+        printf("semas null \n");
+      xSemaphoreGive(semas[x]);
+    }
+    printf("###### fc0:  %p\n", fc0);
+    printf("###### fc1:  %p\n", fc1);
+    xTaskCreatePinnedToCore(&pc_monitor_feed_display_multithreaded_v1_one_chunk, "feed_display_task", 10000, NULL, 5, render_task_handle, 0);
+    second_framebuffer = (uint8_t *)heap_caps_malloc(chunk_size + extra_bytes, MALLOC_CAP_SPIRAM);
+  }
 }
 
-static void tcp_server_task(struct context ctx)
+static void tcp_server_task(void *pvParameter)
 {
   char addr_str[128];
   int addr_family;
@@ -662,11 +734,11 @@ static void tcp_server_task(struct context ctx)
     //  if (already_got_settings == false)
 
     power_on_driver();
-    ctx = receive_settings(sock, ctx);
-
+    receive_settings(sock);
+    ch();
 // dma_buffer = epd_get_current_buffer();
 #if FT245MODE == 0
-    download_and_extract(sock, ctx);
+    download_and_extract(sock);
 #else
     signal_245_fifo(sock);
 #endif
@@ -685,13 +757,20 @@ CLEAN_UP:
 void app_main()
 {
 
-  ctx.is_connected = 0;
-  ctx.mirroring_active = 0;
-  ctx.prev_total_lines_changed = 0;
-  ctx.frame_counter = 0;
-  ctx.width_resolution = EPD_WIDTH;
-  ctx.height_resolution = EPD_HEIGHT;
-  printf("w %d %d, h %d %d, \n", ctx.width_resolution, ctx.height_resolution, EPD_WIDTH, EPD_HEIGHT);
+  is_connected = 0;
+  mirroring_active = 0;
+  prev_total_lines_changed = 0;
+  // frame_counter = 0;
+  width_resolution = EPD_WIDTH;
+  height_resolution = EPD_HEIGHT;
+  current_buffer = 0;
+  need_to_refresh = 0;
+  for (int g = 0; g < 2; g++)
+  {
+    busy[g] = 0;
+    clear[g] = 0;
+  }
+  printf("w %d %d, h %d %d, \n", width_resolution, height_resolution, EPD_WIDTH, EPD_HEIGHT);
 
   esp_log_level_set("wifi", ESP_LOG_NONE);
 
@@ -750,11 +829,5 @@ void app_main()
 
   epd_base_init(EPD_WIDTH);
 
-#if MULTITASK == 1
-  ctx.multitask = 1;
-  xTaskCreatePinnedToCore(&pc_monitor_feed_display_multithreaded_v1_one_chunk, "feed_display_task", 10000, &ctx, 5, NULL, 0);
-  ctx.second_framebuffer = (uint8_t *)heap_caps_malloc(ctx.eink_framebuffer_size, MALLOC_CAP_SPIRAM);
-#endif
-  ctx.multitask = 0;
-  xTaskCreatePinnedToCore(&tcp_server_task, "tcp_server_task", 10000, &ctx, 5, NULL, 1);
+  xTaskCreatePinnedToCore(&tcp_server_task, "tcp_server_task", 10000, NULL, 5, NULL, 1);
 }

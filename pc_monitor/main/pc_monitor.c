@@ -22,7 +22,7 @@
 #include <lwip/netdb.h>
 
 #define EPD_LINE_BYTES EPD_WIDTH / 4
-#define MULTITASK 1
+#define MULTITASK 0
 
 extern uint8_t ready1[6];
 uint8_t *current_chunk;
@@ -30,7 +30,7 @@ uint8_t *current_chunk;
 
 //extern uint8_t *fc0, *fc1 , *fc2 , *fc3 , *fc4 , *fc5 , *fc6 , *fc7 , *fc8 , *fc9 ;
 
-uint8_t *get_current_chunk_ptr(int chunk_number, struct context ctx)
+uint8_t *get_current_chunk_ptr(int chunk_number)
 {
   switch (chunk_number)
   {
@@ -58,214 +58,271 @@ uint8_t *get_current_chunk_ptr(int chunk_number, struct context ctx)
   return fc0;
 }
 
-void IRAM_ATTR switch_framebuffer(struct context ctx)
+int IRAM_ATTR switch_framebuffer_n(int n)
 {
-  if (ctx.current_buffer == 0)
-    ctx.current_buffer = 1;
-  else if (ctx.current_buffer == 1)
-    ctx.current_buffer = 0;
+  if (n == 0)
+    n = 1;
+  else if (n == 1)
+    n = 0;
+  return n;
+}
+void IRAM_ATTR switch_framebuffer()
+{
+  if (current_buffer == 0)
+    current_buffer = 1;
+  else if (current_buffer == 1)
+    current_buffer = 0;
+  return current_buffer;
+}
+int back_buffer()
+{
+  int n = 0;
+  if (current_buffer == 1)
+    n = 0;
+  else if (current_buffer == 0)
+    n = 1;
+  return n;
 }
 
-void IRAM_ATTR pc_monitor_feed_display_with_skip(int total_lines_changed, int prev_total_lines_changed, struct context ctx)
+void IRAM_ATTR pc_monitor_feed_display_with_skip(int total_lines_changed)
 {
+  int rmt_time;
+
   long time2 = xTaskGetTickCount();
   int framebuffer_cycles_final;
-  if (ctx.mouse_moved == 1 && total_lines_changed < ctx.framebuffer_cycles_2_threshold && prev_total_lines_changed < ctx.framebuffer_cycles_2_threshold)
-    framebuffer_cycles_final = ctx.framebuffer_cycles_2;
+  if (mouse_moved == 1 && total_lines_changed < framebuffer_cycles_2_threshold)
+    framebuffer_cycles_final = framebuffer_cycles_2;
   else
-    framebuffer_cycles_final = ctx.framebuffer_cycles;
+    framebuffer_cycles_final = framebuffer_cycles;
   for (int i = 0; i < framebuffer_cycles_final; i++)
   {
+    if (mode == 10)
+      rmt_time = draw_rmt_times[frame_counter];
+    else
+      rmt_time = draw_rmt_times[i];
+
+#if DEBUG_MSGs == 1
+    printf("#framebuffer_cycle: %d,  frame_counter: %d , rmt timing: %d , mode %d #\n", i, frame_counter, rmt_time, mode);
+#endif
 
     epd_start_frame();
 
-    for (int h = 0; h < ctx.nb_chunks; h++)
+    for (int h = 0; h < nb_chunks; h++)
     {
-      current_chunk = get_current_chunk_ptr(h, ctx);
-      int offset = (h * ctx.nb_rows_per_chunk);
-      if (ctx.enable_skipping == 1 && total_lines_changed < ctx.epd_skip_threshold) //only skip the rows that haven't changed if they are less in number than the specified threshold
+      current_chunk = get_current_chunk_ptr(h);
+      int offset = (h * nb_rows_per_chunk);
+      if (enable_skipping == 1 && total_lines_changed < epd_skip_threshold) //only skip the rows that haven't changed if they are less in number than the specified threshold
       {
-        for (int g = 0; g < ctx.nb_rows_per_chunk; g++)
+        for (int g = 0; g < nb_rows_per_chunk; g++)
         {
           switch (line_changed[offset + g])
           {
           case 1:
             memcpy(epd_get_current_buffer(), current_chunk + (g * EPD_LINE_BYTES), EPD_LINE_BYTES);
 
-            epd_output_row(draw_rmt_times[h]);
+            epd_output_row(rmt_time);
             break;
 
           case 0:
             epd_skip();
             //   memcpy(epd_get_current_buffer(), current_chunk + (g * EPD_LINE_BYTES), EPD_LINE_BYTES);
-            //   epd_output_row(ctx.rmt_high_time);
+            //   epd_output_row(rmt_high_time);
             break;
           }
         }
       }
       else
       {
-        for (int g = 0; g < ctx.nb_rows_per_chunk; g++)
+        for (int g = 0; g < nb_rows_per_chunk; g++)
         {
           memcpy(epd_get_current_buffer(), current_chunk + (g * EPD_LINE_BYTES), EPD_LINE_BYTES);
-          epd_output_row(draw_rmt_times[h]);
+          epd_output_row(rmt_time);
         }
       }
     }
     epd_end_frame();
 
-    ctx.frame_counter++;
+    // frame_counter++;
   }
-  printf("draw time: %lu\n", xTaskGetTickCount() - time2);
+  printf("Draw time: %lu\n", xTaskGetTickCount() - time2);
 }
 
-void IRAM_ATTR pc_monitor_feed_display(int total_lines_changed, int prev_total_lines_changed, struct context ctx)
+void IRAM_ATTR pc_monitor_feed_display(int total_lines_changed)
 {
   long time2 = xTaskGetTickCount();
   int framebuffer_cycles_final;
-  if (ctx.mouse_moved == 1 && total_lines_changed < ctx.framebuffer_cycles_2_threshold && prev_total_lines_changed < ctx.framebuffer_cycles_2_threshold)
-    framebuffer_cycles_final = ctx.framebuffer_cycles_2;
+  if (mouse_moved == 1 && total_lines_changed < framebuffer_cycles_2_threshold)
+    framebuffer_cycles_final = framebuffer_cycles_2;
   else
-    framebuffer_cycles_final = ctx.framebuffer_cycles;
+    framebuffer_cycles_final = framebuffer_cycles;
 
   for (int i = 0; i < framebuffer_cycles_final; i++)
   {
 
     epd_start_frame();
 
-    for (int h = 0; h < ctx.nb_chunks; h++)
+    for (int h = 0; h < nb_chunks; h++)
     {
-      current_chunk = get_current_chunk_ptr(h, ctx);
-      int offset = (h * ctx.nb_rows_per_chunk);
+      current_chunk = get_current_chunk_ptr(h);
+      int offset = (h * nb_rows_per_chunk);
 
-      for (int g = 0; g < ctx.nb_rows_per_chunk; g++)
+      for (int g = 0; g < nb_rows_per_chunk; g++)
       {
         memcpy(epd_get_current_buffer(), current_chunk + (g * EPD_LINE_BYTES), EPD_LINE_BYTES);
-        epd_output_row(ctx.rmt_high_time);
+        epd_output_row(rmt_high_time);
       }
     }
     epd_end_frame();
 
-    ctx.frame_counter++;
+    //   frame_counter++;
   }
   printf("draw time: %lu\n", xTaskGetTickCount() - time2);
 }
 
-void IRAM_ATTR pc_monitor_feed_display_multithreaded_v1(struct context ctx)
+void IRAM_ATTR pc_monitor_feed_display_multithreaded_v1()
 {
   printf("pc_monitor_feed_display_multithreaded \n");
-  ctx.rmt_high_time = 150;
+  rmt_high_time = 150;
   int sleep_time = 1;
-  while (ctx.mirroring_active == 0)
+  while (mirroring_active == 0)
   {
     vTaskDelay(5 / portTICK_PERIOD_MS);
   }
   while (1)
   {
 
-    ctx.renderer_chunk_counter = 0;
-    while (ctx.renderer_chunk_counter == ctx.downloader_chunk_counter)
+    renderer_chunk_counter = 0;
+    while (renderer_chunk_counter == downloader_chunk_counter)
     { //vTaskDelay(sleep_time / portTICK_PERIOD_MS);
     };
     long time2 = xTaskGetTickCount();
 
     epd_start_frame();
 
-    for (int b = 0; b < ctx.nb_rows_per_chunk; b++)
+    for (int b = 0; b < nb_rows_per_chunk; b++)
     {
       memcpy(epd_get_current_buffer(), framebuffer_chunks[0] + (b * EPD_LINE_BYTES), EPD_LINE_BYTES);
-      epd_output_row(ctx.rmt_high_time);
-      // output_row(ctx.rmt_high_time, 1, framebuffer_chunks[0] + b * EPD_LINE_BYTES);
+      epd_output_row(rmt_high_time);
+      // output_row(rmt_high_time, 1, framebuffer_chunks[0] + b * EPD_LINE_BYTES);
     }
-    ctx.renderer_chunk_counter++;
-    //    printf("rend cc %d \n", ctx.downloader_chunk_counter);
+    renderer_chunk_counter++;
+    //    printf("rend cc %d \n", downloader_chunk_counter);
 
-    for (int h = 0; h < ctx.nb_chunks - 1; h++)
+    for (int h = 0; h < nb_chunks - 1; h++)
     {
 
-      while (ctx.renderer_chunk_counter == ctx.downloader_chunk_counter)
+      while (renderer_chunk_counter == downloader_chunk_counter)
       { //vTaskDelay(sleep_time / portTICK_PERIOD_MS);
       };
 
-      for (int g = 0; g < ctx.nb_rows_per_chunk * (ctx.nb_chunks - 1); g++)
+      for (int g = 0; g < nb_rows_per_chunk * (nb_chunks - 1); g++)
         epd_skip();
-      for (int g = 0; g < ctx.nb_rows_per_chunk; g++)
+      for (int g = 0; g < nb_rows_per_chunk; g++)
       {
         memcpy(epd_get_current_buffer(), framebuffer_chunks[h + 1] + (g * EPD_LINE_BYTES), EPD_LINE_BYTES);
-        epd_output_row(ctx.rmt_high_time);
-        //  output_row(ctx.rmt_high_time, 1, framebuffer_chunks[h + 1] + (g * EPD_LINE_BYTES));
+        epd_output_row(rmt_high_time);
+        //  output_row(rmt_high_time, 1, framebuffer_chunks[h + 1] + (g * EPD_LINE_BYTES));
       }
 
-      ctx.renderer_chunk_counter++;
-      // printf("rend cc %d \n", ctx.downloader_chunk_counter);
+      renderer_chunk_counter++;
+      // printf("rend cc %d \n", downloader_chunk_counter);
     }
     epd_end_frame();
 
-    ctx.renderer_chunk_counter = 0;
+    renderer_chunk_counter = 0;
 
     int time3 = (xTaskGetTickCount() - time2);
 
     printf("draw time: %d\n", time3);
-    //  printf("r: %d lp = %d \n", time3, ctx.frame_counter);
+    //  printf("r: %d lp = %d \n", time3, frame_counter);
 
-    ctx.frame_counter++;
+    //  frame_counter++;
   }
 }
 
-void IRAM_ATTR pc_monitor_feed_display_multithreaded_v1_one_chunk(struct context ctx)
+void IRAM_ATTR pc_monitor_feed_display_multithreaded_v1_one_chunk()
 {
   printf("pc_monitor_feed_display_multithreaded_v1_onechunk \n");
-  ctx.rmt_high_time = 150;
+  int rmt_time, which_buffer = 0;
   int sleep_time = 2;
-  while (ctx.mirroring_active == 0)
+  renderer_frame_counter = 0;
+  while (mirroring_active == 0)
   {
     vTaskDelay(5 / portTICK_PERIOD_MS);
   }
+  xSemaphoreTake(begin, 9999999);
+
+  vTaskDelay(5000 / portTICK_PERIOD_MS);
   while (1)
   {
+    printf("v1_onechunk \n");
 
-    ctx.renderer_chunk_counter = 0;
-    while (ctx.renderer_chunk_counter == ctx.downloader_chunk_counter)
-    {
-      // vTaskDelay(sleep_time / portTICK_PERIOD_MS);
-    };
-    long time2 = xTaskGetTickCount();
+    renderer_chunk_counter = 0;
     uint8_t *ptr = NULL;
 
-#if MULTITASK == 1
-    printf("r current_buffer %d \n", ctx.current_buffer);
-    if (ctx.current_buffer == 1)
-      ptr = second_framebuffer;
-    else if (ctx.current_buffer == 0)
-      ptr = framebuffer_chunks[0];
-#else
-    ptr = framebuffer_chunks[0];
-#endif
-    for (int y = 0; y < ctx.framebuffer_cycles; y++)
+    while (renderer_frame_counter == downloader_frame_counter)
     {
+      //which_buffer = switch_framebuffer(which_buffer);
+      if (stop == 1)
+      {
+        printf("terminating render task \n");
+        vTaskDelete(NULL);
+      }
+      // vTaskDelay(sleep_time / portTICK_PERIOD_MS);
+    };
+
+    long time2 = xTaskGetTickCount();
+
+    printf("r current_buffer %d \n", current_buffer);
+    ptr = get_current_chunk_ptr(current_buffer);
+
+#if DEBUG_MSGs == 2
+    printf("###### ptr:  %p\n", ptr);
+#endif
+
+    if (clear[current_buffer] != 0)
+    {
+      printf("r clearing with delay %d\n", clear[current_buffer]);
+      epd_clear();
+      vTaskDelay(clear[current_buffer] / portTICK_PERIOD_MS);
+      clear[current_buffer] = 0;
+    }
+
+    for (int y = 0; y < framebuffer_cycles; y++)
+    {
+      renderer_busy = 1;
+      busy[current_buffer] = 6;
+      if (mode == 10)
+        rmt_time = draw_rmt_times[frame_counter];
+      else
+        rmt_time = draw_rmt_times[y];
 
       epd_start_frame();
 
-      for (int b = 0; b < ctx.nb_rows_per_chunk; b++)
+      for (int b = 0; b < nb_rows_per_chunk; b++)
       {
         memcpy(epd_get_current_buffer(), ptr + (b * EPD_LINE_BYTES), EPD_LINE_BYTES);
-        epd_output_row(ctx.rmt_high_time);
-        // output_row(ctx.rmt_high_time, 1, framebuffer_chunks[0] + b * EPD_LINE_BYTES);
+        epd_output_row(rmt_time);
+        // output_row(rmt_high_time, 1, framebuffer_chunks[0] + b * EPD_LINE_BYTES);
       }
     }
-    ctx.renderer_chunk_counter++;
+    renderer_chunk_counter++;
     epd_end_frame();
-    switch_framebuffer(ctx);
+    switch_framebuffer();
+    renderer_busy = 0;
+    busy[current_buffer] = 0;
+    renderer_chunk_counter = 0;
 
-    ctx.renderer_chunk_counter = 0;
-    printf("rend cc %d \n", ctx.downloader_chunk_counter);
+#if DEBUG_MSGs == 2
+    printf("rend cc %d , fc %lu \n", downloader_chunk_counter, renderer_frame_counter);
+#endif
+    renderer_frame_counter++;
+    printf("draw time: %lu\n", (xTaskGetTickCount() - time2));
+    //  printf("r: %d lp = %d \n", time3, frame_counter);
+    if (renderer_frame_counter == 100)
+      renderer_frame_counter = 0;
 
-    int time3 = (xTaskGetTickCount() - time2);
-
-    printf("draw time: %d\n", time3);
-    //  printf("r: %d lp = %d \n", time3, ctx.frame_counter);
-
-    ctx.frame_counter++;
+    // frame_counter++;
   }
 }
 
@@ -285,20 +342,20 @@ void IRAM_ATTR pc_monitor_feed_display_multithreaded_v1_one_chunk(struct context
 //   epd_end_frame();
 // }
 
-void IRAM_ATTR pc_monitor_feed_display_multithreaded_v2(struct context ctx)
+void IRAM_ATTR pc_monitor_feed_display_multithreaded_v2()
 {
   printf("pc_monitor_feed_display_multithreaded \n");
-  ctx.rmt_high_time = 150;
+  rmt_high_time = 150;
   int sleep_time = 1;
-  while (ctx.mirroring_active == 0)
+  while (mirroring_active == 0)
   {
     vTaskDelay(5 / portTICK_PERIOD_MS);
   }
   while (1)
   {
 
-    ctx.renderer_chunk_counter = 0;
-    while (ctx.renderer_chunk_counter == ctx.downloader_chunk_counter)
+    renderer_chunk_counter = 0;
+    while (renderer_chunk_counter == downloader_chunk_counter)
     { //vTaskDelay(sleep_time / portTICK_PERIOD_MS);
     };
     long time2 = xTaskGetTickCount();
@@ -306,48 +363,48 @@ void IRAM_ATTR pc_monitor_feed_display_multithreaded_v2(struct context ctx)
     {
       epd_start_frame();
 
-      for (int b = 0; b < ctx.nb_rows_per_chunk; b++)
+      for (int b = 0; b < nb_rows_per_chunk; b++)
       {
         memcpy(epd_get_current_buffer(), framebuffer_chunks[0] + (b * EPD_LINE_BYTES), EPD_LINE_BYTES);
-        epd_output_row(ctx.rmt_high_time);
-        // output_row(ctx.rmt_high_time, 1, framebuffer_chunks[0] + b * EPD_LINE_BYTES);
+        epd_output_row(rmt_high_time);
+        // output_row(rmt_high_time, 1, framebuffer_chunks[0] + b * EPD_LINE_BYTES);
       }
       epd_end_frame();
     }
-    ctx.renderer_chunk_counter++;
-    //    printf("rend cc %d \n", ctx.downloader_chunk_counter);
+    renderer_chunk_counter++;
+    //    printf("rend cc %d \n", downloader_chunk_counter);
 
-    for (int h = 0; h < ctx.nb_chunks - 1; h++)
+    for (int h = 0; h < nb_chunks - 1; h++)
     {
 
-      while (ctx.renderer_chunk_counter == ctx.downloader_chunk_counter)
+      while (renderer_chunk_counter == downloader_chunk_counter)
       { //vTaskDelay(sleep_time / portTICK_PERIOD_MS);
       };
       for (int j = 0; j < 3; j++)
       {
         epd_start_frame();
 
-        for (int g = 0; g < ctx.nb_rows_per_chunk * (h + 1); g++)
+        for (int g = 0; g < nb_rows_per_chunk * (h + 1); g++)
           epd_skip();
-        for (int g = 0; g < ctx.nb_rows_per_chunk; g++)
+        for (int g = 0; g < nb_rows_per_chunk; g++)
         {
           memcpy(epd_get_current_buffer(), framebuffer_chunks[h + 1] + (g * EPD_LINE_BYTES), EPD_LINE_BYTES);
-          epd_output_row(ctx.rmt_high_time);
-          //  output_row(ctx.rmt_high_time, 1, framebuffer_chunks[h + 1] + (g * EPD_LINE_BYTES));
+          epd_output_row(rmt_high_time);
+          //  output_row(rmt_high_time, 1, framebuffer_chunks[h + 1] + (g * EPD_LINE_BYTES));
         }
         epd_end_frame();
       }
-      ctx.renderer_chunk_counter++;
-      // printf("rend cc %d \n", ctx.downloader_chunk_counter);
+      renderer_chunk_counter++;
+      // printf("rend cc %d \n", downloader_chunk_counter);
     }
 
-    ctx.renderer_chunk_counter = 0;
+    renderer_chunk_counter = 0;
 
     int time3 = (xTaskGetTickCount() - time2);
 
     printf("draw time: %d\n", time3);
-    //  printf("r: %d lp = %d \n", time3, ctx.frame_counter);
+    //  printf("r: %d lp = %d \n", time3, frame_counter);
 
-    ctx.frame_counter++;
+    //   frame_counter++;
   }
 }
