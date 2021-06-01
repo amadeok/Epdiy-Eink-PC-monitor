@@ -36,3 +36,4 @@ int extract_and_compare(unsigned char *eink_framebuffer_swapped, int g);
 
 DWORD pipe_read(HANDLE handle, void *buffer, DWORD nNumberOfBytesToRead, DWORD lpNumberOfBytesRead);
 DWORD pipe_write(HANDLE handle, void *buffer, DWORD nNumberOfBytesToWrite, DWORD lpNumberOfBytesWritten);
+

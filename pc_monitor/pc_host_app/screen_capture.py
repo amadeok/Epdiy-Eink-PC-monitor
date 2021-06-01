@@ -11,7 +11,7 @@ import io, struct
 from random import randint
 import numpy as np
 import threading, cv2
-from draw_cursor import generate_cursor, draw_cursor, draw_cursor_1bpp
+from draw_cursor import generate_cursor, draw_cursor, draw_cursor_1bpp, paste_cursor
 from multiprocessing import shared_memory, resource_tracker, Value
 from collections import namedtuple
 
@@ -55,14 +55,19 @@ if ctx.a.child_process == 0:
             f'{display_list[x].rmt_high_time}',
             f'{display_list[x].enable_skipping}',
             f'{display_list[x].epd_skip_threshold}',
-            f'{display_list[x].epd_skip_mouse_only}',
+            f'{display_list[x].esp32_multithread}', 
+          #  f'{display_list[x].epd_skip_mouse_only}',
             f'{display_list[x].framebuffer_cycles_2}',
             f'{display_list[x].framebuffer_cycles_2_threshold}',
             f'{modes[display_list[x].mode]}',
             f'{display_list[x].selective_compression}',
             f'{display_list[x].nb_chunks}', 
             f'{display_list[x].nb_draws}', 
+            f'{display_list[x].draw_white_first}', 
+            f'{modes[display_list[x].mode]}', 
+
             f'{display_list[x].do_full_refresh}', 
+
             f'{display_list[x].a.disable_logging}',
             f'{ctx.wifi_on}'])
 
@@ -80,13 +85,18 @@ if ctx.a.child_process == 0:
 def main_task(ctx):
     if ctx.a.child_process == 0:
         write_to_shared_mem(ctx.offset_variables.mode, modes.get(ctx.mode), 'a')
-        if ctx.invert > 0:
+        write_to_shared_mem(ctx.offset_variables.selective_invert, ctx.selective_invert, 'a')
+
+        if ctx.invert > 1:
             write_to_shared_mem(ctx.offset_variables.invert_threshold, ctx.invert, 'a')
             write_to_shared_mem(ctx.offset_variables.invert, ctx.invert, 'a')
 
     if pipe_output:
         fd1, fd0 = open_pipes(ctx)
-    generate_cursor()
+
+    dith.alloc_memory_()
+
+    n = 0
     with mss.mss() as sct:
 
         while 1:
@@ -97,21 +107,31 @@ def main_task(ctx):
                 ctx.switcher = 0;
             t0 = time.time()
 
-            if linux: ready = os.read(fd1, 1)
-            elif windows: ret2 = win32file.ReadFile(fd1, 1)
-
+            if pipe_output:
+                if linux: ready = os.read(fd1, 1)
+                elif windows: ret2 = win32file.ReadFile(fd1, 1)
+            
             sct_img = sct.grab(ctx.monitor) #capture screen
 
-            #mouse_moved = draw_cursor(display_list[0], sct_img)
+
+            # image_file = Image.frombytes(
+            #     "RGB", sct_img.size, sct_img.rgb, "raw", "RGB")
+            try: rgb = sct_img.rgb
+            except Exception as e:
+                print(e)
+                sct_img = sct.grab(ctx.monitor)
+                rgb = sct_img.rgb
+                n+=1
+
+            image_file =    Image.frombytes('RGB', (ctx.width, ctx.height), rgb)
 
             if ctx.pipe_bit_depth == 8:
-                mouse_moved = draw_cursor(display_list[0], sct_img)
+                mouse_moved = paste_cursor(ctx, image_file)
 
-            image_file = Image.frombytes(
-                "RGB", sct_img.size, sct_img.bgra, "raw", "RGBX")
-            mode = get_val_from_shm(ctx.offset_variables.mode, 'i')    
+            mode = r_shm(ctx.offset_variables.mode, 'i')    
+            ctx.mode_code = mode
 
-            if mode ==  10: ctx.pipe_bit_depth = 8
+            if mode ==  10 or ctx.draw_white_first: ctx.pipe_bit_depth = 8
             else: ctx.pipe_bit_depth = 1
 
             if mode == 9: #PIL dithering
@@ -124,7 +144,7 @@ def main_task(ctx):
 
 
                 image_file = convert_to_greyscale_and_enhance(image_file, ctx, ctx.offset_variables)
-                th = ctx.grey_monochrome_threshold+get_val_from_shm(ctx.offset_variables.grey_to_monochrome_threshold, 'i')
+                th = ctx.grey_monochrome_threshold+r_shm(ctx.offset_variables.grey_to_monochrome_threshold, 'i')
                 
                 def fn(x): return 255 if x > th else 0
 
@@ -133,32 +153,31 @@ def main_task(ctx):
             elif mode > 0 and mode < 9: #other dithering
                 image_file = convert_to_greyscale_and_enhance(image_file, ctx, ctx.offset_variables)
 
-                np_arr = np.asarray(image_file)
-
-                np_arr = np.ravel(np_arr)
+                mode = get_mode(modes, r_shm(ctx.offset_variables.mode, 'i'))
 
 
-                mode = get_mode(get_val_from_shm(ctx.offset_variables.mode, 'i'))
-                if dith.apply(np_arr, mode) == -1:
+                if dith.apply(ctx.np_arr, mode) == -1:
                     print("error dither type")
-                    byte_frag = pipe_output_f(raw_files, None, mouse_moved, fd1, fd0)  # 1bpp->raw_files[0]
+                    byte_frag = pipe_output_f(raw_data, None, mouse_moved, fd1, fd0)  # 1bpp->raw_files[0]
                     continue
-                
-                image_file = Image.frombytes('RGB', sct_img.size, np_arr)
-                #t0 = t()
 
+                image_file = Image.frombytes('RGB', sct_img.size, ctx.np_arr)
+                #t0 = t()
+                
                 image_file = image_file.convert('L')
 
-                invert =  get_val_from_shm(ctx.offset_variables.invert, 'i')
+                invert =  r_shm(ctx.offset_variables.invert, 'i')
 
-                if invert > -1:
-                    if invert == 0: image_file = ImageOps.invert(image_file)
+                if invert > 0:
+                    if invert == 1: image_file = ImageOps.invert(image_file)
                     else:   image_file = smart_invert(image_file)
+
+
 
                 def fn(x): return x
 
                 image_file = image_file.point(fn, mode='1')
-                
+
                 #print(t()-t0)
                 
             elif mode == 10: # 4 shades grayscale mode
@@ -170,7 +189,7 @@ def main_task(ctx):
 
             else:
                 print("error?")
-            if mode != 10:
+            if mode != 10 and not ctx.draw_white_first:
                 image_file = image_file.transpose(Image.FLIP_TOP_BOTTOM) #flip the image so that the first bytes contain the pixel data of the first lines
             if ctx.rotation != 0:
                 image_file   = image_file.rotate(ctx.rotation,  expand=True)
@@ -179,12 +198,7 @@ def main_task(ctx):
                 raw_data = get_raw_pixels(
                     image_file, raw_output_file, save_raw_file, ctx.switcher) #remove bitmap pad bytes
             if save_bmp:
-                image_file2 = image_file.copy()
-                if mode != 10:
-                    image_file2 = image_file2.transpose(Image.FLIP_TOP_BOTTOM) #flip the image so that the first bytes contain the pixel data of the first lines
-                if ctx.rotation != 0:
-                    image_file2   = image_file2.rotate(ctx.rotation,  expand=True)
-                image_file2.save(ctx.complete_output_file)
+                save_bmp_fun(image_file, mode)
             if pipe_output:  # and dif_list_sum
                 
                 if ctx.pipe_bit_depth == 1:
@@ -195,8 +209,7 @@ def main_task(ctx):
                     
             if ctx.a.disable_logging == 0:
                 took = int(((time.time() - t0)*1000))
-                if took > 1000:
-                    print("mroe than")
+
                 print(f"Display ID: {ctx.id}, capture took {took}ms")
             time.sleep(ctx.sleep_time/1000)
 

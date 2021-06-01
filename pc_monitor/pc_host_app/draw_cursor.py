@@ -243,7 +243,8 @@ def draw_cursor(conf, sct_img):
     elif windows: 
         pos = win32gui.GetCursorPos()
         pos2.x = pos[0]; pos2.y = pos[1]
-
+    if pos2.y > 918:
+        print("in")
     if pos2.x >= x_offset and pos2.x <= width_res2 and pos2.y >= y_offset and pos2.y <= height_res2:
         x_cursor = pos2.x - x_offset
         y_cursor = pos2.y - y_offset
@@ -287,3 +288,27 @@ def draw_cursor(conf, sct_img):
     else:
         #print(f"outside : pos2.x  {pos2.x } pos2.y  {pos2.y }")
         return 0
+def paste_cursor(ctx, image_file):
+
+
+    global pos2; global cursor
+    previous_pos = pos2
+
+    if linux:
+        pos2 = pyautogui.position()
+    elif windows: 
+        pos = win32gui.GetCursorPos()
+        pos2.x = pos[0]; pos2.y = pos[1]
+    
+    if pos2.x >= ctx.x_offset and pos2.x <= ctx.width_res2 and pos2.y >= ctx.y_offset and pos2.y <= ctx.height_res2-22:
+        image_file.paste(ctx.cursor,box=(pos2.x-ctx.x_offset,pos2.y-ctx.y_offset),mask=ctx.cursor)
+        if previous_pos.x == pos2.x and previous_pos.y == pos2.y:
+            #print(f" not moved px {previous_pos.x}, cx {pos2.x}, py {previous_pos.y}, cy {pos2.y}")
+            return 0
+        else:
+            #print(f" moved ::  px {previous_pos.x}, cx {pos2.x}, py {previous_pos.y}, cy {pos2.y}")
+            return 1
+    else:
+        #print(f"outside : pos2.x  {pos2.x } pos2.y  {pos2.y }")
+        return 0
+   

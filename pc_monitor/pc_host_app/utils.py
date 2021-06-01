@@ -55,10 +55,14 @@ def t():
 
 modes =  {
     "monochrome" : 0,    "Bayer16" : 1,    "Bayer8" : 2,    "Bayer4" : 3,    "Bayer3" : 4,
-    "Bayer2" : 5,     "FS" : 6,     "SierraLite" : 7, 	     "Sierra" : 8,    "PIL_dither" : 9,  "4grayscale": 10 
+    "Bayer2" : 5,     "FS" : 6,     "SierraLite" : 7, 	     "Sierra" : 8,    "PIL_dither" : 9,
+      "4grayscale": 10
 }
-def get_mode(mode_code):
-    return [k for k,v in modes.items() if v == mode_code][0]
+polarize_modes =  {
+    "off" : 0,    "rgb" : 1,    "L" : 2
+}
+def get_mode(dict, mode_code):
+    return [k for k,v in dict.items() if v == mode_code][0]
 
 def eval_args(self):
     args = str(sys.argv)
@@ -122,6 +126,7 @@ class display_settings(object):
             n = 0
             for c in val:
                 if c == '.': n+=1
+                if c == ',': n+=1
             if n> 1:
                 return val
             elif n == 1: return float(val)
@@ -165,34 +170,43 @@ class display_settings(object):
         self.log = f"Python ID {self.id}: " 
         self.complete_output_file = f'{working_dir}/image_id_{self.id}.bmp'
         self.settings_dither = 0
-        if self.mode == "4grayscale":
+        self.twenty_four_bpp = np.full((self.width* self.height * 3), 255, dtype=np.uint8)
+        self.np_arr = None
+        if self.mode == "4grayscale" or self.draw_white_first:
             self.nb_chunks == 5
             self.pipe_bit_depth = 8
             self.eight_bpp = np.full((self.width, self.height), 255, dtype=np.uint8)
             self.byte_string_list = [self.eight_bpp, self.eight_bpp]
-            self.nb_draws = 3
-            self.framebuffer_cycles = 2
-
-
-
+            if self.mode == "4grayscale":
+                self.grayscale_shades = 4
+                self.framebuffer_cycles = 1
+            else:
+                self.grayscale_shades = 2 #black and white
         else: 
             self.nb_chunks = 5
             self.pipe_bit_depth = 1
             self.eight_bpp = None
-            self.nb_draws = 1
-            
+            self.grayscale_shades = 2
+
+        self.nb_draws = (self.grayscale_shades -1 )
+        self.cursor = Image.open('cursor.png')
+        if self.draw_white_first: 
+            self.nb_draws = self.nb_draws*2
+
         if self.nb_draws> self.framebuffer_cycles: 
             self.nb_rmt_times = self.nb_draws
         else: self.nb_rmt_times = self.framebuffer_cycles
         self.pipe_settings = bytearray(b'\x00\x00\x00')
-        self.draw_rmt_times = self.rmt_high_time.split(':')
+        if isinstance(self.rmt_high_time , str):
+            self.draw_rmt_times = self.rmt_high_time.split(':')
+        else: self.draw_rmt_times = [str(self.rmt_high_time)]
 
         for q in range(len(self.draw_rmt_times)):
             self.draw_rmt_times[q] = int(self.draw_rmt_times[q]);
             if q < self.nb_rmt_times:
                 self.pipe_settings += self.draw_rmt_times[q].to_bytes(2, 'little')
         if len(self.draw_rmt_times) < self.nb_rmt_times:
-            print("Warning: not enough rmt high times for each framebuffer cycle have been specified")
+            #print("Warning: not enough rmt high times for each framebuffer cycle have been specified")
             dif = self.nb_rmt_times - len(self.draw_rmt_times)
             for w in range(dif):
                 self.draw_rmt_times.append(self.draw_rmt_times[0]);
@@ -200,14 +214,21 @@ class display_settings(object):
                     self.pipe_settings += self.draw_rmt_times[0].to_bytes(2, 'little')
 
         self.pipe_settings_size = len(self.pipe_settings)
-
+        if self.esp32_multithread:
+            self.nb_chunks = 1
+        
         #self.check_resize()
 
         if self.a.disable_wifi == 1: self.wifi_on = 0;
         else: self.wifi_on = 1
         setup_shared_memory(self)
         self.mode = read_dither_method(self)
-        
+        self.pole_factor = float(self.polarize.split(',')[0])
+        self.pole_pivot = int(self.polarize.split(',')[1])
+        self.pole_mode = self.polarize.split(',')[2]
+
+
+
 def read_file(conf_file):
     display_conf = []
     conf_file_path = f'{working_dir}/{conf_file}'
@@ -337,6 +358,7 @@ def get_raw_pixels(image_file, file_path, save_raw_file, switcher):
     elif ctx.pipe_bit_depth == 8:
         ctx.byte_string_list[switcher] = np.asarray(image_file, dtype=np.uint8)
         byte_string_raw = None
+
     return [ctx.byte_string_list[switcher], byte_string_raw, ctx.byte_string_list]
 
 
@@ -404,7 +426,7 @@ def pipe_output_f(raw_files, np_image_file, mouse_moved, fd1, fd0):
 
     ctx.pipe_settings[1] = mouse_moved
 
-    ctx.pipe_settings[2] = get_val_from_shm(ctx.offset_variables.mode, 'i')
+    ctx.pipe_settings[2] = r_shm(ctx.offset_variables.mode, 'i')
     #print(ctx.pipe_settings[2])
     if linux: os.write(fd0, ctx.pipe_settings)
     elif windows: win32file.WriteFile(fd0, ctx.pipe_settings)
@@ -440,17 +462,23 @@ def write_to_shared_mem(obj, increase, type):
     elif type == 'a':
         shared_buffer[obj.pos:obj.pos+4] = increase.to_bytes(4,  byteorder = 'big', signed=True)
 
-def get_val_from_shm(obj, type):
+def r_shm(obj, type):
     if type == 'f':
         return round((bytearray_to_float(ctx.shared_buffer[obj.pos:obj.pos+4]))[0], 1)
     elif type == 'i':
         return int.from_bytes(ctx.shared_buffer[obj.pos:obj.pos+4], byteorder='big', signed=True)
 
-
+def check_arr(array):
+        if isinstance(array, np.ndarray) and array.dtype == np.uint8 and len(array.shape)==1:
+            ptr0 = array.ctypes.data
+            ptr0= ctypes.c_uint64(ptr0)
+        else: 
+            print("pixel data must be 1d for dither")
+            return -1
+        return ptr0
 class dither_setup:
     path = os.path.dirname(__file__)
     cdll = ctypes.CDLL(os.path.join(path, "dither_.dll" if sys.platform.startswith("win") else "dither_.so"))
-
     def indirect(self,i):
         method_name= str(i)
         method=getattr(self.cdll,method_name,lambda :'Invalid')
@@ -496,14 +524,45 @@ class dither_setup:
             print("pixel data must be 1d for dither")
             return -1
         self.cdll.quantize(ptr0, ptr1, size)
-            
+
+    def polarize_(self, pixels, factor, pivot, size):
+        #size = ctx.width * ctx.height
+        factor_offset = r_shm(ctx.offset_variables.polarize_factor, 'f')
+        factor_ = ctypes.c_float(factor + factor_offset)
+        size_ = ctypes.c_uint64(size)
+        self.cdll.polarize(check_arr(pixels), factor_, pivot, size_)
+        
+    def polarize_24bit_(self, pixels, pixels24, factor, pivot):
+        v0 = check_arr(pixels)
+        v1 = check_arr(pixels24)
+        factor_ = ctypes.c_float(factor)
+        size = ctypes.c_uint64(ctx.tot_nb_pixels)
+        self.cdll.polarize_24bit(v0, v1, factor_, pivot, size)
+
+    def alloc_memory_(self):
+        self.cdll.alloc_memory(ctx.tot_nb_pixels)
+
+    def selective_invert_v2_(self, pixels,  chunk_w,  chunk_h,  thres_perc,  b_thres,  fill_thres):
+        self.cdll.selective_invert_v2(check_arr(pixels), ctx.width,  ctx.height,  chunk_w,  chunk_h,  thres_perc,  b_thres,  fill_thres)
+
+    def invert_task_(self, pixels,  chunk_w,  chunk_h,  thres_perc,  b_thres,  fill_thres, pole_factor,  pivot):
+        self.cdll.invert_task(check_arr(pixels), ctx.width,  ctx.height,  chunk_w,  chunk_h,  thres_perc,  b_thres,  fill_thres)
+
+def save_bmp_fun(image_file, mode):
+    image_file2 = image_file.copy()
+    if mode != 10 and not ctx.draw_white_first:
+        image_file2 = image_file2.transpose(Image.FLIP_TOP_BOTTOM) #flip the image so that the first bytes contain the pixel data of the first lines
+    if ctx.rotation != 0 or ctx.draw_white_first:
+        image_file2   = image_file2.rotate(ctx.rotation,  expand=True)
+    image_file2.save(ctx.complete_output_file)
+
 def check_key_presses(PID_list, conf):
     x = 0
     if linux:
         orig_settings = termios.tcgetattr(sys.stdin)
     class Switcher():
         sl = 0.0
-
+            
         def indirect(self,i):
             method_name='fun_'+str(i)
             method=getattr(self,method_name,lambda :'Invalid')
@@ -524,14 +583,14 @@ def check_key_presses(PID_list, conf):
             ctx.settings_dither = 1
 
             ctx.mode = "monochrome"
-            write_to_shared_mem(conf.mode, 0, 'a');  print("Monochrome mode is on ", get_val_from_shm(conf.mode, 'i'))
+            write_to_shared_mem(conf.mode, 0, 'a');  print("Monochrome mode is on ", r_shm(conf.mode, 'i'))
             time.sleep(self.sl)
             ctx.settings_dither = 0
 
         def fun_p(self):
             ctx.settings_dither = 1
             ctx.mode = "PIL_dither"
-            write_to_shared_mem(conf.mode, 9, 'a'); print("Pil dithering mode is on ", get_val_from_shm(conf.mode, 'i'))
+            write_to_shared_mem(conf.mode, 9, 'a'); print("Pil dithering mode is on ", r_shm(conf.mode, 'i'))
 
             time.sleep(self.sl)
             ctx.settings_dither = 0
@@ -540,25 +599,33 @@ def check_key_presses(PID_list, conf):
             ctx.settings_dither = 1
             ctx.mode = read_dither_method(ctx)
             write_to_shared_mem(conf.mode, modes.get(ctx.mode), 'a')
-            print(f"Dithering mode {ctx.mode} is on {get_val_from_shm(conf.mode, 'i')}" )    
+            print(f"Dithering mode {ctx.mode} is on {r_shm(conf.mode, 'i')}" )    
             time.sleep(self.sl)
             ctx.settings_dither = 0
 
         def fun_i(self):
-            inv = get_val_from_shm(conf.invert, 'i')
-            if inv != -1:
-                write_to_shared_mem(conf.invert, -1, 'a');  print("Invert is off ", get_val_from_shm(conf.invert, 'i'))
-            elif inv != 0:
-                write_to_shared_mem(conf.invert, 0, 'a'),  print("Invert is on ", get_val_from_shm(conf.invert, 'i'))
+            inv = r_shm(conf.invert, 'i')
+            if inv != 0:
+                write_to_shared_mem(conf.invert, 0, 'a');  print("Invert is off ", r_shm(conf.invert, 'i'))
+            elif inv != 1:
+                write_to_shared_mem(conf.invert, 1, 'a'),  print("Invert is on ", r_shm(conf.invert, 'i'))
      
-        def fun_f(self):
-            fill_blacks = get_val_from_shm(conf.fill_blacks, 'i')
-            if fill_blacks != -1:
-                write_to_shared_mem(conf.fill_blacks, -1, 'a');  print("fill_blacks is off ", get_val_from_shm(conf.fill_blacks, 'i'))
-            elif fill_blacks != 0:
-                write_to_shared_mem(conf.fill_blacks, 0, 'a'),  print("fill_blacks is on ", get_val_from_shm(conf.fill_blacks, 'i'))
+        def fun_s(self):
+            selective_invert = r_shm(conf.selective_invert, 'i')
+            if selective_invert != 0:
+                write_to_shared_mem(conf.selective_invert, 0, 'a');  print("selective_invert is off ", r_shm(conf.selective_invert, 'i'))
+            elif selective_invert != 1:
+                write_to_shared_mem(conf.selective_invert, 1, 'a'),  print("selective_invert is on ", r_shm(conf.selective_invert, 'i'))
         def fun_g(self):
-            write_to_shared_mem(conf.mode, 10, 'a');  print("greyscale mode is on ", get_val_from_shm(conf.mode, 'i'))
+            write_to_shared_mem(conf.mode, 10, 'a');  print("greyscale mode is on ", r_shm(conf.mode, 'i'))
+        def fun_w(self): write_to_shared_mem(conf.polarize_factor, -0.1, 'f');  print("polarize_factor is  ", r_shm(conf.polarize_factor, 'f') + ctx.pole_factor)
+        def fun_e(self): write_to_shared_mem(conf.polarize_factor, +0.1, 'f');  print("polarize_factor is  ", r_shm(conf.polarize_factor, 'f')+ ctx.pole_factor)
+        def fun_k(self):
+            pole_mode = r_shm(conf.pole_mode, 'i')
+            if pole_mode == 2:
+                pole_mode = -1
+            write_to_shared_mem(conf.pole_mode, pole_mode+1, 'a');  print("pole_mode ", get_mode(polarize_modes, (r_shm(conf.pole_mode, 'i'))))
+
 
         def fun_1(self): write_to_shared_mem(conf.color, -0.1, 'f')
         def fun_2(self): write_to_shared_mem(conf.color, +0.1, 'f')
@@ -571,19 +638,19 @@ def check_key_presses(PID_list, conf):
         def fun_9(self): write_to_shared_mem(conf.grey_to_monochrome_threshold, -10, 'i')
         def fun_0(self): write_to_shared_mem(conf.grey_to_monochrome_threshold, +10, 'i')
         def fun_y(self):
-            write_to_shared_mem(conf.invert, 1, 'a'); 
+            write_to_shared_mem(conf.invert, 2, 'a'); 
             write_to_shared_mem(conf.invert_threshold, -10, 'i'); 
-            print("Smart invert is on with threshold ", get_val_from_shm(conf.invert_threshold, 'i') )
+            print("Smart invert is on with threshold ", r_shm(conf.invert_threshold, 'i') )
         def fun_u(self):  
-            write_to_shared_mem(conf.invert, 1, 'a'); 
+            write_to_shared_mem(conf.invert, 2, 'a'); 
             write_to_shared_mem(conf.invert_threshold, +10, 'i');
-            print("Smart invert is on with threshold ", get_val_from_shm(conf.invert_threshold, 'i'))
+            print("Smart invert is on with threshold ", r_shm(conf.invert_threshold, 'i'))
         def fun_b(self):
-            if get_val_from_shm(conf.enhance_before_greyscale, 'i') == 1:
-                write_to_shared_mem(conf.enhance_before_greyscale, -1, 'i'); print("enhance_before_greyscale is off ", get_val_from_shm(conf.enhance_before_greyscale, 'i'))
+            if r_shm(conf.enhance_before_greyscale, 'i') == 1:
+                write_to_shared_mem(conf.enhance_before_greyscale, -1, 'i'); print("enhance_before_greyscale is off ", r_shm(conf.enhance_before_greyscale, 'i'))
             else:
-                write_to_shared_mem(conf.enhance_before_greyscale, +1, 'i');  print("enhance_before_greyscale is on ", get_val_from_shm(conf.enhance_before_greyscale, 'i'))
-    
+                write_to_shared_mem(conf.enhance_before_greyscale, +1, 'i');  print("enhance_before_greyscale is on ", r_shm(conf.enhance_before_greyscale, 'i'))
+
     s=Switcher()
     global exiting; global print_settings
     while 1 and exiting == 0:  # ESC
@@ -594,6 +661,7 @@ def check_key_presses(PID_list, conf):
             
         if x == 'q' or x == 'Q':
             print("Exiting")
+            if linux: termios.tcsetattr(sys.stdin, termios.TCSADRAIN, orig_settings)
             if ctx.has_childs == 1:
                 ctx.shared_buffer[0] = 101
             exiting = 101
@@ -614,42 +682,44 @@ def check_key_presses(PID_list, conf):
             n = int(x); 
             if n >= 0 and n <= 9:
                 print_settings = 1
-                #print(f"color {get_val_from_shm(conf.color, 'f')}, contrast  {get_val_from_shm(conf.contrast, 'f')}  brightness {get_val_from_shm(conf.brightness, 'f')}, sharpness {get_val_from_shm(conf.sharpness, 'f')},  grey_to_monochrome_threshold {get_val_from_shm(conf.grey_to_monochrome_threshold, 'i')}")
+                #print(f"color {r_shm(conf.color, 'f')}, contrast  {r_shm(conf.contrast, 'f')}  brightness {r_shm(conf.brightness, 'f')}, sharpness {r_shm(conf.sharpness, 'f')},  grey_to_monochrome_threshold {r_shm(conf.grey_to_monochrome_threshold, 'i')}")
         except: pass
         
-    if linux:
-        termios.tcsetattr(sys.stdin, termios.TCSADRAIN, orig_settings)
-def select_inv(image_file, chunk_w, chunk_h, thres_perc):
-    area = chunk_w * chunk_h
-    quotient = thres_perc /100
-    thres = int(quotient*area)
 
+
+def select_inv(image_file, chunk_w, chunk_h, thres_perc, b_thres, fill_thres):
+    #pole_mode = r_shm(ctx.offset_variables.pole_mode, 'i')
     np_arr = np.asarray(image_file)
     np_arr = np.ravel(np_arr)
-
-    dith.selective_invert_(np_arr,  chunk_w, chunk_h, thres)
-    inv2 = 1
+    # if pole_mode == 2 and selective_invert_on == 1:
+    #     dith.invert_task_(np_arr, chunk_w, chunk_h, thres_perc, b_thres, fill_thres, ctx.pole_factor, ctx.pole_pivot) #polarizes as well
+    # elif selective_invert_on == 1:  #does only selective invert
+    dith.selective_invert_v2_(np_arr, 15, 15, 50, 60, fill_thres)
     image_file = Image.frombytes('L', image_file.size, np_arr)
-
-    #inv = 1
     return image_file
 
 def smart_invert(image_file):
+    inv_thres = r_shm(ctx.offset_variables.invert_threshold, 'i')
+    selective_invert = r_shm(ctx.offset_variables.selective_invert,'i')
+
     np_arr = np.asarray(image_file)
     n = np.mean(np_arr)
     inv = 0; inv2 = 0
-    if n < get_val_from_shm(ctx.offset_variables.invert_threshold, 'i'):
+
+    if n < inv_thres:
         image_file = ImageOps.invert(image_file)
         inv = 1
-    if n > 1 and n < 255 and  get_val_from_shm(ctx.offset_variables.fill_blacks, 'i') == 0:
-        image_file = select_inv(image_file, 15, 15, 80)   # good 15, 15, 80 
+
+    if selective_invert == 1:
+        image_file = select_inv(image_file, 15, 15, 50, 60, 5)#, 2.0, 130);  # good 15, 15, 80 
+
     #print("###", int(n), inv, inv2)
     return image_file
 
 def check_and_invert(image_file):
-    invert =  get_val_from_shm(ctx.offset_variables.invert, 'i')
-    if invert > -1:
-        if invert == 0:
+    invert =  r_shm(ctx.offset_variables.invert, 'i')
+    if invert > 0:
+        if invert == 1:
             image_file = ImageOps.invert(image_file)
         else:
             image_file = smart_invert(image_file)
@@ -680,34 +750,36 @@ class shared_var:
         self.grey_to_monochrome_threshold =   offset_object(34, 0,'i')
         self.invert =   offset_object(38, 0,'i')
         self.invert_threshold =   offset_object(42, 0,'i')
-        self.fill_blacks =   offset_object(46, 0,'i')
+        self.selective_invert =   offset_object(46, 0,'i')
+        self.polarize_factor =   offset_object(50, 0,'f')
+        self.pole_mode =   offset_object(54, 0,'i')
 
 
 def apply_enhancements(image_file, conf, offsets):
     #t0 = time.time()
     global print_settings
-    val0 = get_val_from_shm(offsets.color, 'f')
+    val0 = r_shm(offsets.color, 'f')
     if conf.color + val0 != 1.0:
         enhancer = ImageEnhance.Color(image_file)
         image_file = enhancer.enhance(conf.color + val0)     
 
-    val1 = get_val_from_shm(offsets.contrast, 'f')
+    val1 = r_shm(offsets.contrast, 'f')
     if conf.contrast + val1  != 1.0:
         enhancer = ImageEnhance.Contrast(image_file)
         image_file = enhancer.enhance(conf.contrast + val1)
 
-    val2 = get_val_from_shm(offsets.brightness, 'f')
+    val2 = r_shm(offsets.brightness, 'f')
     if conf.brightness + val2 != 1.0:
         enhancer = ImageEnhance.Brightness(image_file)
         image_file = enhancer.enhance(conf.brightness + val2)
 
-    val3 = get_val_from_shm(offsets.sharpness, 'f')
+    val3 = r_shm(offsets.sharpness, 'f')
     if conf.sharpness + val3 != 1.0:
         enhancer = ImageEnhance.Sharpness(image_file)
         image_file = enhancer.enhance(conf.sharpness + val3)
     
     if print_settings and ctx.a.child_process == 0:
-        print(f"color {conf.color + val0}, contrast  {conf.contrast + val1}  brightness {conf.brightness + val2}, sharpness {conf.sharpness + val3},  grey_to_monochrome_threshold {conf.grey_monochrome_threshold + get_val_from_shm(offsets.grey_to_monochrome_threshold, 'i')}")
+        print(f"color {conf.color + val0}, contrast  {conf.contrast + val1}  brightness {conf.brightness + val2}, sharpness {conf.sharpness + val3},  grey_to_monochrome_threshold {conf.grey_monochrome_threshold + r_shm(offsets.grey_to_monochrome_threshold, 'i')}")
         print_settings = 0
 
     #print("enhance took", time.time() - t0 )
@@ -716,17 +788,39 @@ def apply_enhancements(image_file, conf, offsets):
 
 
 def convert_to_greyscale_and_enhance(image_file, conf, offset_variables):
-    enhance_before_greyscale = get_val_from_shm(offset_variables.enhance_before_greyscale, 'i')
-    val = get_val_from_shm(offset_variables.mode, 'i')
+    enhance_before_greyscale = r_shm(offset_variables.enhance_before_greyscale, 'i')
+    val = r_shm(offset_variables.mode, 'i')
+    pole_mode = r_shm(offset_variables.pole_mode, 'i')
+    selective_invert_on = r_shm(ctx.offset_variables.selective_invert, 'i')
 
     if enhance_before_greyscale:
         image_file = apply_enhancements(image_file, conf, offset_variables)
-        
+
+    if (pole_mode == 1):
+        ctx.np_arr = np.asarray(image_file)
+        ctx.np_arr = np.ravel(ctx.np_arr)
+        dith.polarize_(ctx.np_arr, ctx.pole_factor, ctx.pole_pivot, ctx.tot_nb_pixels*3)
+        if val >= 9 or val == 0:
+            image_file = Image.frombytes('RGB', (ctx.width, ctx.height), ctx.np_arr)
+
+    elif val > 0 and val < 9:
+        ctx.np_arr = np.asarray(image_file)
+        ctx.np_arr = np.ravel(ctx.np_arr)
+
     if val >= 9 or val == 0:
         image_file = image_file.convert('L')
+
+        if pole_mode == 2:
+            np_arr = np.asarray(image_file)
+            np_arr = np.ravel(np_arr)
+            dith.polarize_(np_arr, ctx.pole_factor,ctx.pole_pivot, ctx.tot_nb_pixels)
+            image_file = Image.frombytes('L', (ctx.width, ctx.height), np_arr)
+
+        #image_file.save("/home/amadeok/epdiy-working/examples/pc_monitor/pc_host_app/8.bmp")
+
         image_file = check_and_invert(image_file)
 
-    if enhance_before_greyscale  == 0:
+    if enhance_before_greyscale  == 0 and val >= 9 or val == 0:
         image_file = apply_enhancements(image_file, conf, offset_variables)
     return image_file
 
@@ -739,42 +833,3 @@ for x in range(nb_displays):
 ctx = display_list[0]
 
 dith = dither_setup()
-
-g = 0
-""" path = os.path.dirname(__file__)
-cdll = ctypes.CDLL(os.path.join(path, "dither_.dll" if sys.platform.startswith("win") else "dither_.so"))
-makeDitherBayer16 = cdll.makeDitherSierraLite
-
-
-def sum_it(l, w, h):
-    if isinstance(l, np.ndarray) and l.dtype == np.uint8 and len(l.shape)==1 or 1:
-        v = l.ctypes.data
-        v1= ctypes.c_uint64(v)
-    makeDitherBayer16(v1, w, h)
-    return l """
-
-""" monitor = {"top": 0, "left": 0, "width": 1200, "height": 825}
-output = "sct-{top}x{left}_{width}x{height}.png".format(**monitor)
-import mss
-def t():
-    return time.time()
-# Grab the data
-with mss.mss() as sct:
-    sct_img = sct.grab(monitor)
-    img = bytearray(sct_img.rgb)
-    s0 = sct_img.size
-
-im = Image.frombytes('RGB', sct_img.size, sct_img.rgb)
-
-test = np.asarray(im)
-test = np.ravel(test)
-t0 =t() 
-
-a = dith.apply(test, 'makeDitherSierraLite')
-print(t() - t0)
-pili = Image.frombytes('RGB', sct_img.size, test)
-pili = pili.convert('1')
-pili.save("pili.bmp")
- """
-
-

@@ -60,7 +60,7 @@ char *compressed_eink_framebuffer_ptrs[16]; //array of pointers pointing to chun
 int id, refresh_every_x_frames = 0, refresh_every_x_frames_, selective_compression;
 
 int total_nb_pixels, eink_framebuffer_size, chunk_size, nb_chunks, nb_draws, nb_rmt_times;
-int source_image_bit_depth = 1, mode = -1;
+int source_image_bit_depth = 1, mode = -1, draw_white_first;
 bool disable_logging;
 uint32_t loop_counter[1] = {0};
 int mouse_moved = 0;
@@ -229,6 +229,7 @@ static int mirroring_task()
 #endif
 
     //nb_chunks = 5; // number of pieces into which divide the framebuffer (for multiprocessing)
+    int white_pixel;
 
     total_nb_pixels = width_resolution * height_resolution;
     eink_framebuffer_size = total_nb_pixels / 4;
@@ -285,7 +286,6 @@ static int mirroring_task()
     eink_framebuffer_modified = (char *)calloc(eink_framebuffer_size, sizeof(char));
     eink_framebuffer_swapped = (char *)calloc(eink_framebuffer_size, sizeof(char));
     decompressed = (char *)calloc(eink_framebuffer_size + 50000, sizeof(char));
-
     for (int h = 0; h < nb_chunks; h++)
     {
         compressed_eink_framebuffer_ptrs[h] = (char *)calloc(chunk_size * 2, sizeof(char));
@@ -308,12 +308,16 @@ static int mirroring_task()
         printf("unsupported bit depth\n");
         return -1;
     }
-    memset(source_8bpp_current, 255, total_nb_pixels * sizeof(unsigned char));
-    memset(source_8bpp_modified_current, 255, total_nb_pixels * sizeof(unsigned char));
-
-    memset(source_8bpp_previous, 255, total_nb_pixels * sizeof(unsigned char));
+    if (draw_white_first && mode == 10)
+        white_pixel = 255;
+    else
+        white_pixel = 1;
+    memset(source_8bpp_current, white_pixel, total_nb_pixels * sizeof(unsigned char));
+    memset(source_8bpp_modified_current, white_pixel, total_nb_pixels * sizeof(unsigned char));
+    memset(source_8bpp_previous, white_pixel, total_nb_pixels * sizeof(unsigned char));
 
     int total[] = {1}, repeat_counter = 0, next = 0;
+    char *eight_bpp_ptr;
 
     printf("C++ ID %d mirroring started \n", id);
 
@@ -326,7 +330,7 @@ static int mirroring_task()
         ret2 = pipe_read(fd0, ack2, 3 + nb_rmt_times * sizeof(uint16_t), ret2);
         memcpy(draw_rmt_times, ack2 + 3, nb_rmt_times * sizeof(uint16_t));
         mode = ack2[2];
-        if (mode == 10)
+        if (mode == 10 || draw_white_first)
             refresh_every_x_frames_ = refresh_every_x_frames * nb_draws;
         else
             refresh_every_x_frames_ = refresh_every_x_frames;
@@ -346,8 +350,20 @@ static int mirroring_task()
             mouse_moved = 0;
             //   printf("not moved\n");
         }
-        if (ack2[2] == 10)
+
+        if (ack2[2] == 10 || draw_white_first == 1)
+        {
+            if (mode == 10)
+                eight_bpp_ptr = source_8bpp_modified_current;
+            else
+                eight_bpp_ptr = source_8bpp_current;
+
+            if (draw_white_first && mode == 10)
+                white_pixel = 255;
+            else
+                white_pixel = 1;
             source_image_bit_depth = 8;
+        }
         else
         {
             source_image_bit_depth = 1;
@@ -377,20 +393,21 @@ static int mirroring_task()
             if (source_image_bit_depth == 1)
                 memset(padded_2bpp_framebuffer_previous, 85, eink_framebuffer_size * sizeof(unsigned char));
             else
-                memset(source_8bpp_previous, 255, total_nb_pixels * sizeof(unsigned char));
+                memset(source_8bpp_previous, white_pixel, total_nb_pixels * sizeof(unsigned char));
         }
         else
         {
             if (source_image_bit_depth == 1)
                 memcpy(padded_2bpp_framebuffer_previous, padded_2bpp_framebuffer_current, eink_framebuffer_size);
             else
-                memcpy(source_8bpp_previous, source_8bpp_modified_current, total_nb_pixels * sizeof(unsigned char));
+                memcpy(source_8bpp_previous, eight_bpp_ptr, total_nb_pixels * sizeof(unsigned char));
         }
 
-        if (source_image_bit_depth == 8 || improve_dither == 1)
+        if (source_image_bit_depth == 8)
         {
 
-            ret2 = pipe_read(fd0, source_8bpp_current, total_nb_pixels, ret2);
+            ret2 = pipe_read(fd0, eight_bpp_ptr, total_nb_pixels, ret2);
+          //  array_to_file(eight_bpp_ptr, total_nb_pixels, working_dir, "eight_bpp_ptr", 0);
 
             if (ret2 != total_nb_pixels)
                 printf("warning ret2 total_nb_pixels\n");
@@ -405,21 +422,23 @@ static int mirroring_task()
         }
         else if (source_image_bit_depth == 8)
         {
+
             switch (nb_draws)
             {
             case 1:
                 generate_eink_framebuffer_v2(source_8bpp_current, source_8bpp_previous, source_8bpp_modified_previous, eink_framebuffer, ack2[2]);
             default:
                 //  int t0 = getTick();
-                quantize(source_8bpp_current, source_8bpp_modified_current, total_nb_pixels);
+                if (mode == 10)
+                    quantize(source_8bpp_current, source_8bpp_modified_current, total_nb_pixels);
 
-                array_to_file(source_8bpp_previous, total_nb_pixels, working_dir, "source_8bpp_previous", 0);
-                system("python3 /home/amadeok/epdiy-working/examples/pc_monitor/pc_host_app/img_test.py source_8bpp_previous0");
-                array_to_file(source_8bpp_modified_current, total_nb_pixels, working_dir, "source_8bpp_modified_current", 0);
-                system("python3 /home/amadeok/epdiy-working/examples/pc_monitor/pc_host_app/img_test.py source_8bpp_modified_current0");
+                //array_to_file(source_8bpp_previous, total_nb_pixels, working_dir, "source_8bpp_previous", 0);
+                // system("python3 /home/amadeok/epdiy-working/examples/pc_monitor/pc_host_app/img_test.py source_8bpp_previous0");
+               // array_to_file(eight_bpp_ptr, total_nb_pixels, working_dir, "eight_bpp_ptr", 0);
+                // system("python3 /home/amadeok/epdiy-working/examples/pc_monitor/pc_host_app/img_test.py eight_bpp_ptr0");
 
                 // printf("%d \n", getTick() - t0);
-                generate_eink_framebuffer_v2(source_8bpp_modified_current, source_8bpp_previous, source_8bpp_modified_previous, eink_framebuffer, ack2[2]);
+                generate_eink_framebuffer_v2(eight_bpp_ptr, source_8bpp_previous, source_8bpp_modified_previous, eink_framebuffer, ack2[2]);
 
                 //  array_to_file(source_8bpp_modified_current, total_nb_pixels, working_dir, "source_8bpp_modified_current", 0);
             }
@@ -512,6 +531,8 @@ int main(int argc, char *argv[])
     esp32_settings[8] = std::stoi(argv[14]);
     esp32_settings[9] = std::stoi(argv[15]);
     esp32_settings[10] = std::stoi(argv[16]);
+    draw_white_first = std::stoi(argv[17]);
+    mode = std::stoi(argv[18]);
 
     do_full_refresh = std::stoi(argv[nb_args - 3]);
     disable_logging = std::stoi(argv[nb_args - 2]);
@@ -525,14 +546,17 @@ int main(int argc, char *argv[])
     // printf("rmt_high_time: %d\n", esp32_settings[1]);
     printf("enable_skipping: %d\n", esp32_settings[2]);
     printf("epd_skip_threshold: %d\n", esp32_settings[3]);
-    printf("epd_skip_mouse_only: %d\n", esp32_settings[4]);
+    printf("esp32_multithread: %d\n", esp32_settings[4]);
 
     printf("framebuffer_cycles_2: %d\n", esp32_settings[5]);
     printf("framebuffer_cycles_2_threshold: %d\n", esp32_settings[6]);
-    printf("pseudo_greyscale_mode: %d\n", esp32_settings[7]);
+    //  printf("pseudo_greyscale_mode: %d\n", esp32_settings[7]);
     printf("selective_compression: %d\n", selective_compression = esp32_settings[8]);
     printf("nb_chunks: %d\n", nb_chunks = esp32_settings[9]);
     printf("nb_draws: %d\n", nb_draws = esp32_settings[10]);
+    printf("draw_white_first: %d\n", draw_white_first);
+    printf("mode: %d\n", mode);
+
     wifi_on = std::stoi(argv[nb_args - 1]);
 
     if (nb_draws > esp32_settings[0])
