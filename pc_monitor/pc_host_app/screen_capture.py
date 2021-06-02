@@ -100,7 +100,6 @@ def main_task(ctx):
     with mss.mss() as sct:
 
         while 1:
-            t()
             if ctx.switcher == 0:
                 ctx.switcher = 1;
             else:
@@ -209,7 +208,6 @@ def main_task(ctx):
                 took = int(((time.time() - t0)*1000))
 
                 print(f"Display ID: {ctx.id}, capture took {took}ms")
-            t()
 
             time.sleep(ctx.sleep_time/1000)
 
