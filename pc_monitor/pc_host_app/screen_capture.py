@@ -100,12 +100,11 @@ def main_task(ctx):
     with mss.mss() as sct:
 
         while 1:
-            t0 = time.time()
+            t()
             if ctx.switcher == 0:
                 ctx.switcher = 1;
             else:
                 ctx.switcher = 0;
-            t0 = time.time()
 
             if pipe_output:
                 if linux: ready = os.read(fd1, 1)
@@ -133,7 +132,6 @@ def main_task(ctx):
 
             if mode ==  10 or ctx.draw_white_first: ctx.pipe_bit_depth = 8
             else: ctx.pipe_bit_depth = 1
-
             if mode == 9: #PIL dithering
                 
                 image_file = convert_to_greyscale_and_enhance(image_file, ctx, ctx.offset_variables)
@@ -211,6 +209,8 @@ def main_task(ctx):
                 took = int(((time.time() - t0)*1000))
 
                 print(f"Display ID: {ctx.id}, capture took {took}ms")
+            t()
+
             time.sleep(ctx.sleep_time/1000)
 
 main_task(ctx)

@@ -164,7 +164,9 @@ void wifi_transfer(char *eink_framebuffer_swapped, int eink_framebuffer_size)
             ret = send(socket_desc, framebuffer_to_send[g] + tot, buf_size, 0);
             tot += ret;
             if (ret == -1)
-                printf("error transfer wifi returneed -1\n");
+                {printf("wifi transfer returned -1, exiting\n");
+                            exit(EXIT_SUCCESS);
+}
             if (framebuffer_to_send_size - tot < buf_size + 5000)
                 buf_size = framebuffer_to_send_size - tot;
         } while (tot < framebuffer_to_send_size);
