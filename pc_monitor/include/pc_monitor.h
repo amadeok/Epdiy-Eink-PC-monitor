@@ -7,21 +7,15 @@
 #include "freertos/task.h"
 #include "xtensa/core-macros.h"
 
-#define DEBUG_MSGs 2
-volatile int is_connected;
-volatile int mirroring_active;
-volatile int renderer_chunk_counter;
-volatile int downloader_chunk_counter;
-volatile unsigned long renderer_frame_counter;
-volatile unsigned long downloader_frame_counter;
+#define DEBUG_MSGs 0
+
+volatile int renderer_chunk_counter, downloader_chunk_counter;
+volatile unsigned long renderer_frame_counter, downloader_frame_counter;
 volatile int current_buffer;
-volatile int renderer_busy;
-volatile int downloader_busy;
-volatile int stop;
-volatile int need_to_refresh;
+volatile int renderer_busy, downloader_busy;
+volatile int stop, clearing;
+volatile unsigned long tr0, tr1, td0, td1;
 
-
-int16_t prev_total_lines_changed;
 volatile uint8_t mouse_moved;
 int download_size;
 int per_frame_wifi_settings_size;
@@ -41,8 +35,8 @@ int extra_bytes;
 int nb_draws;
 int nb_rmt_times;
 int mode;
-uint8_t need_to_extract;
 int frame_counter;
+uint8_t need_to_extract;
 
 uint8_t *compressed_chunk;
 uint8_t *chunk_lenghts;
@@ -60,14 +54,10 @@ uint16_t *draw_rmt_times;
 uint8_t *per_frame_wifi_settings;
 uint8_t *fc0, *fc1, *fc2, *fc3, *fc4, *fc5, *fc6, *fc7, *fc8, *fc9;
 uint8_t ready0[6];
-volatile uint8_t busy[6];  
 volatile uint8_t clear[2];
 
-SemaphoreHandle_t zero_sema;
-SemaphoreHandle_t one_sema;
-SemaphoreHandle_t semas[2];
+
 SemaphoreHandle_t begin;
-TaskHandle_t render_task_handle;
 
 /**
  * Write the decompressed buffers to the display 
