@@ -3,7 +3,6 @@
 #include <malloc.h>
 #include <string.h>
 #include <inttypes.h>
-#include <iostream>
 
 uint8_t *pixels_ori;
 uint8_t *pixels_inv_b;
@@ -71,7 +70,7 @@ extern "C"
 
         for (int h = 0; h < size; h++)
         { // int v = source_8bpp_current[h];
-            val = (u_int8_t)source_8bpp_current[h] / 64;
+            val = (uint8_t)source_8bpp_current[h] / 64;
             switch (val)
             {
             case 0:
