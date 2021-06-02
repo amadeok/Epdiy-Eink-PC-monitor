@@ -60,11 +60,9 @@ char *compressed_eink_framebuffer_ptrs[16]; //array of pointers pointing to chun
 int id, refresh_every_x_frames = 0, refresh_every_x_frames_, selective_compression;
 
 int total_nb_pixels, eink_framebuffer_size, chunk_size, nb_chunks, nb_draws, nb_rmt_times;
-int source_image_bit_depth = 1, mode = -1, draw_white_first;
+int source_image_bit_depth = 1, mode = -1, draw_white_first, esp32_multithread;
 bool disable_logging;
-uint32_t loop_counter[1] = {0};
 int mouse_moved = 0;
-int pseudo_greyscale_mode = 0, improve_dither;
 int do_full_refresh = 1;
 unsigned char full_refresh_delay = 30;
 int per_frame_wifi_settings_size;
@@ -72,6 +70,7 @@ char ready0[6];
 char ready1[6];
 char *per_frame_wifi_settings;
 uint16_t *draw_rmt_times;
+uint32_t loop_counter[1] = {0};
 
 char input_pipe[200];
 char output_pipe[200];
@@ -230,7 +229,7 @@ static int mirroring_task()
 
     //nb_chunks = 5; // number of pieces into which divide the framebuffer (for multiprocessing)
     int white_pixel;
-
+    int first_time = 1;
     total_nb_pixels = width_resolution * height_resolution;
     eink_framebuffer_size = total_nb_pixels / 4;
     chunk_size = (eink_framebuffer_size / nb_chunks);
@@ -397,6 +396,12 @@ static int mirroring_task()
         }
         else
         {
+            if (esp32_multithread == 1 && first_time == 1 && loop_counter != 0)
+            {
+                memset(padded_2bpp_framebuffer_current, 85, eink_framebuffer_size * sizeof(unsigned char));
+                memset(eight_bpp_ptr, white_pixel, total_nb_pixels * sizeof(unsigned char));
+                first_time = 0;
+            }
             if (source_image_bit_depth == 1)
                 memcpy(padded_2bpp_framebuffer_previous, padded_2bpp_framebuffer_current, eink_framebuffer_size);
             else
@@ -407,7 +412,7 @@ static int mirroring_task()
         {
 
             ret2 = pipe_read(fd0, eight_bpp_ptr, total_nb_pixels, ret2);
-          //  array_to_file(eight_bpp_ptr, total_nb_pixels, working_dir, "eight_bpp_ptr", 0);
+            //  array_to_file(eight_bpp_ptr, total_nb_pixels, working_dir, "eight_bpp_ptr", 0);
 
             if (ret2 != total_nb_pixels)
                 printf("warning ret2 total_nb_pixels\n");
@@ -434,7 +439,7 @@ static int mirroring_task()
 
                 //array_to_file(source_8bpp_previous, total_nb_pixels, working_dir, "source_8bpp_previous", 0);
                 // system("python3 /home/amadeok/epdiy-working/examples/pc_monitor/pc_host_app/img_test.py source_8bpp_previous0");
-               // array_to_file(eight_bpp_ptr, total_nb_pixels, working_dir, "eight_bpp_ptr", 0);
+                // array_to_file(eight_bpp_ptr, total_nb_pixels, working_dir, "eight_bpp_ptr", 0);
                 // system("python3 /home/amadeok/epdiy-working/examples/pc_monitor/pc_host_app/img_test.py eight_bpp_ptr0");
 
                 // printf("%d \n", getTick() - t0);
@@ -443,8 +448,6 @@ static int mirroring_task()
                 //  array_to_file(source_8bpp_modified_current, total_nb_pixels, working_dir, "source_8bpp_modified_current", 0);
             }
         }
-        // if (pseudo_greyscale_mode == 1)
-        //     improve_dither_compression(eink_framebuffer, eink_framebuffer_size, line_changed, width_resolution, height_resolution);
         for (int g = 0; g < nb_draws; g++)
         {
             if (g != 0)
@@ -546,7 +549,7 @@ int main(int argc, char *argv[])
     // printf("rmt_high_time: %d\n", esp32_settings[1]);
     printf("enable_skipping: %d\n", esp32_settings[2]);
     printf("epd_skip_threshold: %d\n", esp32_settings[3]);
-    printf("esp32_multithread: %d\n", esp32_settings[4]);
+    printf("esp32_multithread: %d\n", esp32_multithread = esp32_settings[4]);
 
     printf("framebuffer_cycles_2: %d\n", esp32_settings[5]);
     printf("framebuffer_cycles_2_threshold: %d\n", esp32_settings[6]);
