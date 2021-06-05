@@ -7,9 +7,15 @@ uint32_t getTick();
 #define DWORD unsigned long
 #define LPDWORD *DWORD.
 #define SOCKET int32_t
+#include "unistd.h"
+#define cwd getcwd
+#define cd chdir
 #endif
 #ifdef _WIN32
 #include <windows.h>
+#include <direct.h>
+#define cwd _getcwd
+#define cd _chdir
 #endif
 
 //Write an array to a file
@@ -30,3 +36,4 @@ int extract_and_compare(unsigned char *eink_framebuffer_swapped, int g);
 
 DWORD pipe_read(HANDLE handle, void *buffer, DWORD nNumberOfBytesToRead, DWORD lpNumberOfBytesRead);
 DWORD pipe_write(HANDLE handle, void *buffer, DWORD nNumberOfBytesToWrite, DWORD lpNumberOfBytesWritten);
+
