@@ -39,6 +39,12 @@ pip install mss
 pip install pyautogui
 pip install  numpy
 ```
+For Windows 10:
+```bash
+pip install pywin32
+
+```
+
 
 #### Installation:
 
@@ -92,19 +98,21 @@ Note it down.
 Open *example_display.conf* in  *~/epdiy/examples/pc_monitor/pc_host_app/* with a text editor and change the IP address in the first line to the one you noted down before, and, if needed, change the values *width* and *height* to the witdh and height resolution of your display
 
 
-8) Build the pc-host application:
+8) Build the pc-host application and the C shared library:
 On a new terminal:
 On Linux:
 ```bash
 cd   ~/epdiy/examples/pc_monitor/pc_host_app/
 g++  main.cpp generate_eink_framebuffer.cpp rle_compression.cpp utils.cpp -o process_capture -I include
+g++ dither_.cpp invert_.cpp -o dither_.so -shared -fPIC
 ```
 
 On Windows(requires MinGW installed and on PATH):
 ```bash
  cd   C:\epdiy\examples\pc_monitor\pc_host_app\
 
- g++ main.cpp  generate_eink_framebuffer.cpp rle_compression.cpp  utils.cpp   -o   process_capture.exe   -I "C:\Epdiy-Eink-PC-monitor\pc_monitor\pc_host_app\include"  -lws2_32
+ g++ main.cpp  generate_eink_framebuffer.cpp rle_compression.cpp  utils.cpp -static   -o   process_capture.exe   -I "C:\Epdiy-Eink-PC-monitor\pc_monitor\pc_host_app\include"  -lws2_32
+g++ dither_.cpp invert_.cpp -o dither_.dll -shared -fPIC
 
 ```
 9) Now the pc is ready to start the mirroring. If the board is ready to start mirroring it will display a message saying "Socket listening ".
@@ -147,12 +155,16 @@ When converting the capture from 256 greyscale shades to black and white monochr
 
 - *rmt_high_time*: Defines the high tick time of the CKV signal. A higher value makes blacks blacker and whites whiter. Increases draw time. It is defined in *rmt_pulse.h*
 
-- *pseudo_greyscale_mode* enables the pseudo greyscale mode which is monochrome with dithering (experimental). it is possible to switch from monochrome to this mode while the mirroring is running by pressing 'm' on terminal
+- *mode*: there are 10 modes: *monochrome*, *PIL_dither*(Floyd-Steinberg dither) and 8 more dithering modes: *Bayer16*, *Bayer8*  *Bayer4*,  *Bayer3*, *Bayer2*, *FS*, *SierraLite*, *Sierra* which are defined in *Dither.h* 
 
-- *invert*: inverts the colors of the image
+- *invert*: if set to -1 invert is always off, if set to 0 it's always on, if it's greater than zero it acts as a threshold for *smart invert*, which activates. *smart invert* inverts the  whole image only when most of it is black, otherwise it doesn't invert at all. maximum value is 255
 
+- *selective_invert* if set to 1 detects black regions on the screen and inverts them (can create some artifacts). *smart invert* and *selective_invert* can help improve overall usability for text based office work by forcing almost always black letters on white background
+	
 - *color, contrast, brightness, sharpness*: the Pillow module has the option to apply these enhancements to the capture. They are applied before converting the image to 1 bit per pixel. more info: https://pillow.readthedocs.io/en/stable/reference/ImageEnhance.html
 (experimental)
+
+- *draw_white_first* makes the program draw to the display first the white pixels of the image and then the black ones
 
 - *enhance_before_greyscale*: choose wether to apply the Pillow enhancements before or after converting to 8bpp greyscale
 - *do_full_refresh*:   calls epd_clear() to refresh screen
@@ -160,6 +172,8 @@ When converting the capture from 256 greyscale shades to black and white monochr
 Advanced settings:
 - *selective_compression* sets a maximum percentage of eficiency for the rle compression. if that percentage is not met, the framebuffer will be sent without compression to the board  
 
+- *esp32_multithread* starts downloading next frame while the current is being drawn
+- 
 - *enable_skipping*: makes the driver call *epd_skip()* instead of *epd_output_row()* with an empty buffer. It can reduce draw time significantly but may introduce some artifacts. To avoid the artifacts but mantain low draw time when moving the cursor *epd_skip_threshold* can be set to 75.
 
 - *epd_skip_threshold*: if less than *epd_skip_threshold* rows have changed skipping is enabled for the current frame draw. 
@@ -168,7 +182,6 @@ Advanced settings:
 
 #### Hotkeys:
 It is possible to change the following settings while the application is running by pressing their hotkey on the terminal:
--*m* toggles the pseudo greyscale mode
 -*1* decreases *color* by 0.1
 -*2* increases *color* by 0.1
 -*3* decreases *contrast* by 0.1
@@ -181,6 +194,12 @@ It is possible to change the following settings while the application is running
 -*0* decreases *grey_monochrome_threshold* by 10
 -*b* toggles *enhance_before_greyscale*
 -*i* toggles *invert*
+-*u* increases *smart invert* threshold by 10 and activates it
+-*y* decreases *smart invert* threshold by 10 and activates it
+-*s* toggles *selective_invert*
+-*d* switches to the mode specified in the configuration file
+-*m* switches to monochrome mode
+
 
 #### Using multiple displays at the same time
 
@@ -213,6 +232,7 @@ If the display you want to try has a different resolution, other than selecting 
 - Organize the code better
 - Improve ghosting
 - Optimize data transfer between pc and board
+
 
 
 
