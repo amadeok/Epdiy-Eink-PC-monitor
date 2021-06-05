@@ -164,9 +164,10 @@ void wifi_transfer(char *eink_framebuffer_swapped, int eink_framebuffer_size)
             ret = send(socket_desc, framebuffer_to_send[g] + tot, buf_size, 0);
             tot += ret;
             if (ret == -1)
-                {printf("wifi transfer returned -1, exiting\n");
-                            exit(EXIT_SUCCESS);
-}
+            {
+                printf("c++ id %d wifi transfer returned -1, exiting\n", id);
+                exit(EXIT_FAILURE);
+            }
             if (framebuffer_to_send_size - tot < buf_size + 5000)
                 buf_size = framebuffer_to_send_size - tot;
         } while (tot < framebuffer_to_send_size);
@@ -382,7 +383,7 @@ static int mirroring_task()
             ret2 = pipe_read(fd0, source_1bpp, total_nb_pixels / 8, ret2);
             if (ret2 != total_nb_pixels / 8)
             {
-                printf("warning ret2 1bpp \n");
+                printf("c++ id %d warning ret2 1bpp \n", id);
                 return -1;
             }
         }
@@ -417,7 +418,10 @@ static int mirroring_task()
             //  array_to_file(eight_bpp_ptr, total_nb_pixels, working_dir, "eight_bpp_ptr", 0);
 
             if (ret2 != total_nb_pixels)
-                printf("warning ret2 total_nb_pixels\n");
+            {
+                printf("c++ id %d warning ret2 8bpp \n", id);
+                return -1;
+            }
         }
 
         if (source_image_bit_depth == 1)

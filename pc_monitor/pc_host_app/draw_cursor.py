@@ -4,12 +4,21 @@ from PIL import Image
 windows= None; linux = None
 if platform.system() == 'Linux': linux = True; 
 elif platform.system() == 'Windows': windows = True;
+
+class cursor_coor:
+    def __init__(self):
+        self.x = 0
+        self.y = 0
+curr_coor = cursor_coor()
+prev_coor = cursor_coor()
+
 if windows:
     import win32gui
-    pos2 = win32gui.GetCursorPos()
+    pos = win32gui.GetCursorPos()
+    prev_coor.x = pos[0]; prev_coor.y = pos[1]
 
 elif linux:
-    pos2 = pyautogui.position() 
+    prev_coor = pyautogui.position() 
 
 def process_string(current_byte_string):
     inverted_output0= ''
@@ -34,11 +43,7 @@ def process_string(current_byte_string):
 
 #def init_cursor(conf):
 
-class cursor_coor:
-    def __init__(self):
-        self.x = 0
-        self.y = 0
-pos2 = cursor_coor()
+
 
 def draw_cursor_1bpp(conf, byte_string_raw):
 
@@ -50,35 +55,35 @@ def draw_cursor_1bpp(conf, byte_string_raw):
     width_res2 = conf.width_res2
     height_res2 = conf.height_res2
 
-    global pos2; global cursor
-    previous_pos = pos2
+    global curr_coor
+    prev_coor.x = curr_coor.x
+    prev_coor.y = curr_coor.y
 
-    p = pyautogui.position()
     if linux:
-        pos2 = pyautogui.position()
+        curr_coor = pyautogui.position()
     elif windows: 
         pos = win32gui.GetCursorPos()
-        pos2.x = pos[0]; pos2.y = pos[1]
+        curr_coor.x = pos[0]; curr_coor.y = pos[1]
     
-    if pos2.x >= x_offset and pos2.x <= width_res2 and pos2.y >= y_offset and pos2.y <= height_res2-22:
+    if curr_coor.x >= x_offset and curr_coor.x <= width_res2 and curr_coor.y >= y_offset and curr_coor.y <= height_res2-22:
         t0 = time.time()
-        x = int((pos2.x - x_offset) / 8)
-        y = int((pos2.y - y_offset +1))
-        #print(f"inside : pos2.x  {pos2.x } pos2.y  {pos2.y }, y {y}, x {x},  ")
+        x = int((curr_coor.x - x_offset) / 8)
+        y = int((curr_coor.y - y_offset +1))
+        #print(f"inside : curr_coor.x  {curr_coor.x } curr_coor.y  {curr_coor.y }, y {y}, x {x},  ")
 
 
         if conf.rotation == 180:
             x = width_res-x
             y = height_res-y
-            xrem = 7- (pos2.x % 8)
+            xrem = 7- (curr_coor.x % 8)
             y-=8
             x-=4
 
         else:
-            xrem = pos2.x % 8
+            xrem = curr_coor.x % 8
             y+=16
 
-        yrem = (pos2.y - y_offset) % 8
+        yrem = (curr_coor.y - y_offset) % 8
         
         line_coor = (y*width_res//8) + x #+ 62
         #print(f"inv x {x}, line_coor {line_coor}")
@@ -161,14 +166,36 @@ def draw_cursor_1bpp(conf, byte_string_raw):
             j+=1
             byte_string_raw[line_coor+(j*-width_res//8):line_coor+4+(j*-width_res//8)] =  fin
 
-        if previous_pos.x == pos2.x and previous_pos.y == pos2.y:
-            #print(f" not moved px {previous_pos.x}, cx {pos2.x}, py {previous_pos.y}, cy {pos2.y}")
+        if prev_coor.x == curr_coor.x and prev_coor.y == curr_coor.y:
+            #print(f" not moved px {prev_coor.x}, cx {curr_coor.x}, py {prev_coor.y}, cy {curr_coor.y}")
             return 0
         else:
-            #print(f" moved ::  px {previous_pos.x}, cx {pos2.x}, py {previous_pos.y}, cy {pos2.y}")
+            #print(f" moved ::  px {prev_coor.x}, cx {curr_coor.x}, py {prev_coor.y}, cy {curr_coor.y}")
             return 1
     else:
-        #print(f"outside : pos2.x  {pos2.x } pos2.y  {pos2.y }")
+        #print(f"outside : curr_coor.x  {curr_coor.x } curr_coor.y  {curr_coor.y }")
+        return 0
+
+def did_mouse_move(ctx):
+    global curr_coor
+    prev_coor.x = curr_coor.x
+    prev_coor.y = curr_coor.y
+
+    if linux:
+        curr_coor = pyautogui.position()
+    elif windows: 
+        pos = win32gui.GetCursorPos()
+        curr_coor.x = pos[0]; curr_coor.y = pos[1]
+
+    if curr_coor.x >= ctx.x_offset and curr_coor.x <= ctx.width_res2 and curr_coor.y >= ctx.y_offset and curr_coor.y <= ctx.height_res2-22:
+        if prev_coor.x == curr_coor.x and prev_coor.y == curr_coor.y:
+          #  print(f" not moved px {prev_coor.x}, cx {curr_coor.x}, py {prev_coor.y}, cy {curr_coor.y}")
+            return 0
+        else:
+         #   print(f" moved ::  px {prev_coor.x}, cx {curr_coor.x}, py {prev_coor.y}, cy {curr_coor.y}")
+            return 1
+    else:
+       # print(f"outside : curr_coor.x  {curr_coor.x } curr_coor.y  {curr_coor.y }")
         return 0
 
 def generate_cursor():
@@ -235,19 +262,19 @@ def draw_cursor(conf, sct_img):
     width_res2 = conf.width_res2
     height_res2 = conf.height_res2
 
-    global pos2; global cursor
-    previous_pos = pos2
-    
+    global curr_coor
+    prev_coor.x = curr_coor.x
+    prev_coor.y = curr_coor.y
+
     if linux:
-        pos2 = pyautogui.position()
+        curr_coor = pyautogui.position()
     elif windows: 
         pos = win32gui.GetCursorPos()
-        pos2.x = pos[0]; pos2.y = pos[1]
-    if pos2.y > 918:
-        print("in")
-    if pos2.x >= x_offset and pos2.x <= width_res2 and pos2.y >= y_offset and pos2.y <= height_res2:
-        x_cursor = pos2.x - x_offset
-        y_cursor = pos2.y - y_offset
+        curr_coor.x = pos[0]; curr_coor.y = pos[1]
+
+    if curr_coor.x >= x_offset and curr_coor.x <= width_res2 and curr_coor.y >= y_offset and curr_coor.y <= height_res2:
+        x_cursor = curr_coor.x - x_offset
+        y_cursor = curr_coor.y - y_offset
         linear_coor = (y_cursor*width_res*4) + x_cursor*4
         for h in range(15):
             sct_img.raw[linear_coor+(h*width_res*4):linear_coor+(
@@ -279,36 +306,37 @@ def draw_cursor(conf, sct_img):
         sct_img.raw[linear_coor+(h*width_res*4)+offset:linear_coor +
                     (h*width_res*4)+offset+8] = byte_array_cursor[19]
         # print("inside")
-        if previous_pos.x == pos2.x and previous_pos.y == pos2.y:
-            #print(f" not moved px {previous_pos.x}, cx {pos2.x}, py {previous_pos.y}, cy {pos2.y}")
+        if prev_coor.x == curr_coor.x and prev_coor.y == curr_coor.y:
+            #print(f" not moved px {prev_coor.x}, cx {curr_coor.x}, py {prev_coor.y}, cy {curr_coor.y}")
             return 0
         else:
-            #print(f" moved ::  px {previous_pos.x}, cx {pos2.x}, py {previous_pos.y}, cy {pos2.y}")
+            #print(f" moved ::  px {prev_coor.x}, cx {curr_coor.x}, py {prev_coor.y}, cy {curr_coor.y}")
             return 1
     else:
-        #print(f"outside : pos2.x  {pos2.x } pos2.y  {pos2.y }")
+        #print(f"outside : curr_coor.x  {curr_coor.x } curr_coor.y  {curr_coor.y }")
         return 0
 def paste_cursor(ctx, image_file):
 
 
-    global pos2; global cursor
-    previous_pos = pos2
+    global curr_coor; global cursor
+    prev_coor.x = curr_coor.x
+    prev_coor.y = curr_coor.y
 
     if linux:
-        pos2 = pyautogui.position()
+        curr_coor = pyautogui.position()
     elif windows: 
         pos = win32gui.GetCursorPos()
-        pos2.x = pos[0]; pos2.y = pos[1]
+        curr_coor.x = pos[0]; curr_coor.y = pos[1]
     
-    if pos2.x >= ctx.x_offset and pos2.x <= ctx.width_res2 and pos2.y >= ctx.y_offset and pos2.y <= ctx.height_res2-22:
-        image_file.paste(ctx.cursor,box=(pos2.x-ctx.x_offset,pos2.y-ctx.y_offset),mask=ctx.cursor)
-        if previous_pos.x == pos2.x and previous_pos.y == pos2.y:
-            #print(f" not moved px {previous_pos.x}, cx {pos2.x}, py {previous_pos.y}, cy {pos2.y}")
+    if curr_coor.x >= ctx.x_offset and curr_coor.x <= ctx.width_res2 and curr_coor.y >= ctx.y_offset and curr_coor.y <= ctx.height_res2-22:
+        image_file.paste(ctx.cursor,box=(curr_coor.x-ctx.x_offset,curr_coor.y-ctx.y_offset),mask=ctx.cursor)
+        if prev_coor.x == curr_coor.x and prev_coor.y == curr_coor.y:
+            #print(f" not moved px {prev_coor.x}, cx {curr_coor.x}, py {prev_coor.y}, cy {curr_coor.y}")
             return 0
         else:
-            #print(f" moved ::  px {previous_pos.x}, cx {pos2.x}, py {previous_pos.y}, cy {pos2.y}")
+            #print(f" moved ::  px {prev_coor.x}, cx {curr_coor.x}, py {prev_coor.y}, cy {curr_coor.y}")
             return 1
     else:
-        #print(f"outside : pos2.x  {pos2.x } pos2.y  {pos2.y }")
+        #print(f"outside : curr_coor.x  {curr_coor.x } curr_coor.y  {curr_coor.y }")
         return 0
    
