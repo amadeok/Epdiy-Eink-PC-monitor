@@ -22,30 +22,13 @@
 #include <lwip/netdb.h>
 
 #define EPD_LINE_BYTES EPD_WIDTH / 4
-#define MULTITASK 1
-extern int framebuffer_cycles; // sets the number of times to write the current framebuffer to the screen
-extern int rmt_high_time;      // defined in rmt_pulse.h, a higher value makes blacks blacker and whites whiter
-
-extern int enable_skipping, epd_skip_threshold, framebuffer_cycles_2, framebuffer_cycles_2_threshold;
-
-int rmt_low_time = 1;
-volatile int current_buffer = 0;
-extern int nb_chunks; // number of pieces into which divide the framebuffer (for multiprocessing)
-extern int nb_rows_per_chunk;
-int frame_counter = 0;
-
-volatile int renderer_chunk_counter;
-volatile int downloader_chunk_counter;
-extern volatile int mirroring_active;
-extern volatile uint8_t mouse_moved;
+#define MULTITASK 0
 
 extern uint8_t ready1[6];
-extern uint8_t *line_changed;
-uint8_t **framebuffer_chunks; //array of pointers pointing to the decompressed chunks of framebuffer
-uint8_t *second_framebuffer;
-extern uint8_t *fc0, *fc1, *fc2, *fc3, *fc4, *fc5, *fc6, *fc7, *fc8, *fc9;
 uint8_t *current_chunk;
 //uint8_t *dma_buffer;
+
+//extern uint8_t *fc0, *fc1 , *fc2 , *fc3 , *fc4 , *fc5 , *fc6 , *fc7 , *fc8 , *fc9 ;
 
 uint8_t *get_current_chunk_ptr(int chunk_number)
 {
@@ -75,25 +58,52 @@ uint8_t *get_current_chunk_ptr(int chunk_number)
   return fc0;
 }
 
+int IRAM_ATTR switch_framebuffer_n(int n)
+{
+  if (n == 0)
+    n = 1;
+  else if (n == 1)
+    n = 0;
+  return n;
+}
 void IRAM_ATTR switch_framebuffer()
 {
   if (current_buffer == 0)
     current_buffer = 1;
   else if (current_buffer == 1)
     current_buffer = 0;
+  return current_buffer;
+}
+int back_buffer()
+{
+  int n = 0;
+  if (current_buffer == 1)
+    n = 0;
+  else if (current_buffer == 0)
+    n = 1;
+  return n;
 }
 
-void IRAM_ATTR pc_monitor_feed_display_with_skip(int total_lines_changed, int prev_total_lines_changed, int prev_total_lines_changed_2)
+void IRAM_ATTR pc_monitor_feed_display_with_skip(int total_lines_changed)
 {
+  int rmt_time;
+
   long time2 = xTaskGetTickCount();
   int framebuffer_cycles_final;
-  if (mouse_moved == 1 && total_lines_changed < framebuffer_cycles_2_threshold && prev_total_lines_changed < framebuffer_cycles_2_threshold && prev_total_lines_changed_2 < framebuffer_cycles_2_threshold)
+  if (mouse_moved == 1 && total_lines_changed < framebuffer_cycles_2_threshold)
     framebuffer_cycles_final = framebuffer_cycles_2;
   else
     framebuffer_cycles_final = framebuffer_cycles;
-
   for (int i = 0; i < framebuffer_cycles_final; i++)
   {
+    if (mode == 10)
+      rmt_time = draw_rmt_times[frame_counter];
+    else
+      rmt_time = draw_rmt_times[i];
+
+#if DEBUG_MSGs == 1
+    printf("#framebuffer_cycle: %d,  frame_counter: %d , rmt timing: %d , mode %d #\n", i, frame_counter, rmt_time, mode);
+#endif
 
     epd_start_frame();
 
@@ -109,7 +119,8 @@ void IRAM_ATTR pc_monitor_feed_display_with_skip(int total_lines_changed, int pr
           {
           case 1:
             memcpy(epd_get_current_buffer(), current_chunk + (g * EPD_LINE_BYTES), EPD_LINE_BYTES);
-            epd_output_row(rmt_high_time);
+
+            epd_output_row(rmt_time);
             break;
 
           case 0:
@@ -125,22 +136,22 @@ void IRAM_ATTR pc_monitor_feed_display_with_skip(int total_lines_changed, int pr
         for (int g = 0; g < nb_rows_per_chunk; g++)
         {
           memcpy(epd_get_current_buffer(), current_chunk + (g * EPD_LINE_BYTES), EPD_LINE_BYTES);
-          epd_output_row(rmt_high_time);
+          epd_output_row(rmt_time);
         }
       }
     }
     epd_end_frame();
 
-    frame_counter++;
+    // frame_counter++;
   }
-  printf("draw time: %lu\n", xTaskGetTickCount() - time2);
+  printf("Draw time: %lu\n", xTaskGetTickCount() - time2);
 }
 
-void IRAM_ATTR pc_monitor_feed_display(int total_lines_changed, int prev_total_lines_changed, int prev_total_lines_changed_2)
+void IRAM_ATTR pc_monitor_feed_display(int total_lines_changed)
 {
   long time2 = xTaskGetTickCount();
   int framebuffer_cycles_final;
-  if (mouse_moved == 1 && total_lines_changed < framebuffer_cycles_2_threshold && prev_total_lines_changed < framebuffer_cycles_2_threshold && prev_total_lines_changed_2 < framebuffer_cycles_2_threshold)
+  if (mouse_moved == 1 && total_lines_changed < framebuffer_cycles_2_threshold)
     framebuffer_cycles_final = framebuffer_cycles_2;
   else
     framebuffer_cycles_final = framebuffer_cycles;
@@ -163,7 +174,7 @@ void IRAM_ATTR pc_monitor_feed_display(int total_lines_changed, int prev_total_l
     }
     epd_end_frame();
 
-    frame_counter++;
+    //   frame_counter++;
   }
   printf("draw time: %lu\n", xTaskGetTickCount() - time2);
 }
@@ -173,10 +184,10 @@ void IRAM_ATTR pc_monitor_feed_display_multithreaded_v1()
   printf("pc_monitor_feed_display_multithreaded \n");
   rmt_high_time = 150;
   int sleep_time = 1;
-  while (mirroring_active == 0)
-  {
-    vTaskDelay(5 / portTICK_PERIOD_MS);
-  }
+
+  xSemaphoreTake(begin, 9999999);
+  vTaskDelay(1000 / portTICK_PERIOD_MS);
+
   while (1)
   {
 
@@ -225,64 +236,79 @@ void IRAM_ATTR pc_monitor_feed_display_multithreaded_v1()
     printf("draw time: %d\n", time3);
     //  printf("r: %d lp = %d \n", time3, frame_counter);
 
-    frame_counter++;
+    //  frame_counter++;
   }
 }
 
 void IRAM_ATTR pc_monitor_feed_display_multithreaded_v1_one_chunk()
 {
   printf("pc_monitor_feed_display_multithreaded_v1_onechunk \n");
-  rmt_high_time = 150;
-  int sleep_time = 2;
-  while (mirroring_active == 0)
-  {
-    vTaskDelay(5 / portTICK_PERIOD_MS);
-  }
+  int rmt_time;
+  
+  renderer_frame_counter = 0;
+
+  xSemaphoreTake(begin, 9999999);
+  vTaskDelay(1000 / portTICK_PERIOD_MS);
+
   while (1)
   {
-
-    renderer_chunk_counter = 0;
-    while (renderer_chunk_counter == downloader_chunk_counter)
-    {
-      // vTaskDelay(sleep_time / portTICK_PERIOD_MS);
-    };
-    long time2 = xTaskGetTickCount();
-    uint8_t *ptr = NULL;
-
-#if MULTITASK == 1
-    printf("r current_buffer %d \n", current_buffer);
-    if (current_buffer == 1)
-      ptr = second_framebuffer;
-    else if (current_buffer == 0)
-      ptr = framebuffer_chunks[0];
-#else
-    ptr = framebuffer_chunks[0];
+#if DEBUG_MSGs == 2
+    printf("r0 render loop \n");
 #endif
+    renderer_chunk_counter = 0;
+    uint8_t *ptr = NULL;
+    uint8_t *ptr_b = NULL;
+
+    while (renderer_frame_counter == downloader_frame_counter || clearing )
+    {
+      if (stop == 1)
+      {
+        printf("terminating render task \n");
+        vTaskDelete(NULL);
+      }
+      vTaskDelay(1 / portTICK_PERIOD_MS);
+    };
+
+    tr0 = xTaskGetTickCount();
+
+    ptr = get_current_chunk_ptr(current_buffer);
+
     for (int y = 0; y < framebuffer_cycles; y++)
     {
+      renderer_busy = 1;
+      if (mode == 10)
+        rmt_time = draw_rmt_times[frame_counter];
+      else
+        rmt_time = draw_rmt_times[y];
 
       epd_start_frame();
 
       for (int b = 0; b < nb_rows_per_chunk; b++)
       {
         memcpy(epd_get_current_buffer(), ptr + (b * EPD_LINE_BYTES), EPD_LINE_BYTES);
-        epd_output_row(rmt_high_time);
+        epd_output_row(rmt_time);
         // output_row(rmt_high_time, 1, framebuffer_chunks[0] + b * EPD_LINE_BYTES);
       }
     }
-    renderer_chunk_counter++;
     epd_end_frame();
     switch_framebuffer();
+    renderer_busy = 0;
 
-    renderer_chunk_counter = 0;
-    printf("rend cc %d \n", downloader_chunk_counter);
+    tr1 = xTaskGetTickCount();
 
-    int time3 = (xTaskGetTickCount() - time2);
+#if DEBUG_MSGs == 2
+    printf("r2 fc %lu \n", renderer_frame_counter);
+    printf("r3 draw time: %lu | tr1, tr0:  %lu, %lu \n", tr1 - tr0, tr0, tr1);
+#else
+    printf("draw time: %lu\n", tr1 - tr0);
+#endif
+    renderer_frame_counter++;
 
-    printf("draw time: %d\n", time3);
     //  printf("r: %d lp = %d \n", time3, frame_counter);
+    if (renderer_frame_counter == 100)
+      renderer_frame_counter = 0;
 
-    frame_counter++;
+    // frame_counter++;
   }
 }
 
@@ -306,11 +332,10 @@ void IRAM_ATTR pc_monitor_feed_display_multithreaded_v2()
 {
   printf("pc_monitor_feed_display_multithreaded \n");
   rmt_high_time = 150;
-  int sleep_time = 1;
-  while (mirroring_active == 0)
-  {
-    vTaskDelay(5 / portTICK_PERIOD_MS);
-  }
+
+  xSemaphoreTake(begin, 9999999);
+  vTaskDelay(1000 / portTICK_PERIOD_MS);
+
   while (1)
   {
 
@@ -365,6 +390,6 @@ void IRAM_ATTR pc_monitor_feed_display_multithreaded_v2()
     printf("draw time: %d\n", time3);
     //  printf("r: %d lp = %d \n", time3, frame_counter);
 
-    frame_counter++;
+    //   frame_counter++;
   }
 }
