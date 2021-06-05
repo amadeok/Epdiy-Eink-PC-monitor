@@ -19,6 +19,8 @@ extern unsigned char *decompressed_received;
 extern int compressed_chunk_lengths[8];
 extern int chunk_size;
 
+//struct timeb start, end;
+
 uint32_t getTick()
 {
 	#ifdef __linux__
@@ -29,6 +31,8 @@ uint32_t getTick()
     theTick += ts.tv_sec * 1000;
 	#elif _WIN32
 	ULONGLONG theTick = GetTickCount();
+//        ftime(&start);
+
 	#endif
     return theTick;
 }
