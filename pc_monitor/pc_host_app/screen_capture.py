@@ -101,6 +101,8 @@ def main_task(ctx):
     with mss.mss() as sct:
         capture_list = [sct.grab(ctx.monitor).raw, sct.grab(ctx.monitor).raw]
         while 1:
+            t0 = time.time()
+
             if ctx.switcher == 0:
                 ctx.switcher = 1;
             else:
