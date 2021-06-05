@@ -1,7 +1,14 @@
 # Changelog
 
-## [0.05] - 07-05-2021
--added support to use in Windows 10
+## [0.06] -  05-06-2021
+- added draw white pixels first option
+- added selective inversion option
+- added smart invert option
+- reduced cpu usage when screen is not updating
+- added option to run download and draw on seperate task on the board
+
+## [0.05]
+- added 8 dither modes
 
 ## [0.0421] - 25-04-2021
 -added option to do full refresh with epd_clear() instead of a quick one
