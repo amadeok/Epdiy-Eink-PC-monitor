@@ -56,12 +56,12 @@ def draw_cursor_1bpp(conf, byte_string_raw):
     height_res2 = conf.height_res2
 
     global curr_coor
-    prev_coor.x = curr_coor.x
-    prev_coor.y = curr_coor.y
-
     if linux:
+        prev_coor = curr_coor
         curr_coor = pyautogui.position()
     elif windows: 
+        prev_coor.x = curr_coor.x
+        prev_coor.y = curr_coor.y
         pos = win32gui.GetCursorPos()
         curr_coor.x = pos[0]; curr_coor.y = pos[1]
     
@@ -178,12 +178,13 @@ def draw_cursor_1bpp(conf, byte_string_raw):
 
 def did_mouse_move(ctx):
     global curr_coor
-    prev_coor.x = curr_coor.x
-    prev_coor.y = curr_coor.y
 
     if linux:
+        prev_coor = curr_coor
         curr_coor = pyautogui.position()
     elif windows: 
+        prev_coor.x = curr_coor.x
+        prev_coor.y = curr_coor.y
         pos = win32gui.GetCursorPos()
         curr_coor.x = pos[0]; curr_coor.y = pos[1]
 
@@ -263,12 +264,13 @@ def draw_cursor(conf, sct_img):
     height_res2 = conf.height_res2
 
     global curr_coor
-    prev_coor.x = curr_coor.x
-    prev_coor.y = curr_coor.y
 
     if linux:
+        prev_coor = curr_coor
         curr_coor = pyautogui.position()
     elif windows: 
+        prev_coor.x = curr_coor.x
+        prev_coor.y = curr_coor.y
         pos = win32gui.GetCursorPos()
         curr_coor.x = pos[0]; curr_coor.y = pos[1]
 
@@ -319,12 +321,12 @@ def paste_cursor(ctx, image_file):
 
 
     global curr_coor; global cursor
-    prev_coor.x = curr_coor.x
-    prev_coor.y = curr_coor.y
-
     if linux:
+        prev_coor = curr_coor
         curr_coor = pyautogui.position()
     elif windows: 
+        prev_coor.x = curr_coor.x
+        prev_coor.y = curr_coor.y
         pos = win32gui.GetCursorPos()
         curr_coor.x = pos[0]; curr_coor.y = pos[1]
     

@@ -536,11 +536,11 @@ int main(int argc, char *argv[])
     esp32_settings[4] = std::stoi(argv[10]);
     esp32_settings[5] = std::stoi(argv[11]);
     esp32_settings[6] = std::stoi(argv[12]);
-    esp32_settings[7] = std::stoi(argv[13]);
+    esp32_settings[7] = std::stoi(argv[17]);
     esp32_settings[8] = std::stoi(argv[14]);
     esp32_settings[9] = std::stoi(argv[15]);
     esp32_settings[10] = std::stoi(argv[16]);
-    draw_white_first = std::stoi(argv[17]);
+    draw_white_first = esp32_settings[7];
     mode = std::stoi(argv[18]);
 
     do_full_refresh = std::stoi(argv[nb_args - 3]);
@@ -563,7 +563,7 @@ int main(int argc, char *argv[])
     printf("selective_compression: %d\n", selective_compression = esp32_settings[8]);
     printf("nb_chunks: %d\n", nb_chunks = esp32_settings[9]);
     printf("nb_draws: %d\n", nb_draws = esp32_settings[10]);
-    printf("draw_white_first: %d\n", draw_white_first);
+    printf("draw_white_first: %d\n", esp32_settings[7]);
     printf("mode: %d\n", mode);
 
     wifi_on = std::stoi(argv[nb_args - 1]);
