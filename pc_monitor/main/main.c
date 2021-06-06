@@ -305,7 +305,7 @@ int set_download_pointer(int chunk_number)
   if (esp32_multithread == 2)
   {
     //  t0 = xTaskGetTickCount();
-    while (downloader_frame_counter - renderer_frame_counter > 1 || clearing == 1)
+    while (downloader_frame_counter - renderer_frame_counter > 1 || clearing == 1 || renderer_busy == 1)
     {
       vTaskDelay(3 / portTICK_PERIOD_MS);
       //    printf("downloader waiting %d, \n", busy[current_buffer]);
@@ -479,7 +479,6 @@ static void download_and_extract(const int sock)
     downloader_chunk_counter++;
     downloader_frame_counter++;
     downloader_busy = 0;
-    td1 = xTaskGetTickCount();
 
 #if DEBUG_MSGs == 2
     printf("d1 cc %d, fc %lu \n", downloader_chunk_counter, downloader_frame_counter);
@@ -528,6 +527,8 @@ static void download_and_extract(const int sock)
     }
 
 //printf("d2 Download and extract took : %lu\n", xTaskGetTickCount() - time1);
+    td1 = xTaskGetTickCount();
+
 #if DEBUG_MSGs == 2
     printf("d2 Download and extract took : %lu | td1 td0: %lu, %lu \n", td1 - td0, td0, td1);
 #else
@@ -538,7 +539,7 @@ static void download_and_extract(const int sock)
       pc_monitor_feed_display_with_skip(total_lines_changed[0]);
 
     frame_counter++;
-    if (downloader_frame_counter == 100)
+    if (downloader_frame_counter == 4294967290)
       downloader_frame_counter = 0;
     if (frame_counter == nb_draws)
       frame_counter = 0;
@@ -548,12 +549,12 @@ void receive_settings(const int sock)
 {
   printf("Receiving settings.. \n");
   int8_t settings_size[1];
-  ch();
+  
   recv(sock, settings_size, 1, 0);
   printf("settings_size %d \n", settings_size[0]);
-  ch();
+  
   settings = (uint16_t *)calloc(settings_size[0], sizeof(uint16_t));
-  ch();
+  
   int ret = recv(sock, settings, settings_size[0], 0);
   printf("### Settings ### %d \n", ret);
   printf("framebuffer_cycles %d \n", framebuffer_cycles = settings[0]);
@@ -564,7 +565,7 @@ void receive_settings(const int sock)
 
   printf("framebuffer_cycles_2 %d \n", framebuffer_cycles_2 = settings[5]);
   printf("framebuffer_cycles_2_threshold %d \n", framebuffer_cycles_2_threshold = settings[6]);
-  //printf("pseudo_greyscale_mode %d \n", pseudo_greyscale_mode = settings[7]);
+  printf("draw_white_first %d \n", draw_white_first = settings[7]);
   printf("selective_compression %d \n", selective_compression = settings[8]);
   printf("nb_chunks %d \n", nb_chunks = settings[9]);
   printf("nb_draws %d \n", nb_draws = settings[10]);
@@ -580,7 +581,7 @@ void receive_settings(const int sock)
   // already_got_settings = true;
   width_resolution = EPD_WIDTH;
   height_resolution = EPD_HEIGHT;
-  printf("w %d %d, h %d %d, \n", width_resolution, height_resolution, EPD_WIDTH, EPD_HEIGHT);
+
   total_nb_pixels = width_resolution * height_resolution;
   eink_framebuffer_size = total_nb_pixels / 4;
   chunk_size = (eink_framebuffer_size / nb_chunks);
@@ -588,7 +589,7 @@ void receive_settings(const int sock)
   extra_bytes = 200000 / nb_chunks;
   //  int free_mem = esp_get_free_heap_size();
   // ESP_LOGI(TAG, "free memory %d ", free_mem);
-  ch();
+  
 
   compressed_chunk = (uint8_t *)heap_caps_malloc(chunk_size, MALLOC_CAP_SPIRAM);
   chunk_lenghts = (uint8_t *)heap_caps_malloc(64, MALLOC_CAP_SPIRAM);
@@ -598,11 +599,11 @@ void receive_settings(const int sock)
   draw_rmt_times = (uint16_t *)heap_caps_malloc(nb_rmt_times * sizeof(uint16_t), MALLOC_CAP_SPIRAM);
   per_frame_wifi_settings = (uint8_t *)heap_caps_malloc(per_frame_wifi_settings_size, MALLOC_CAP_SPIRAM);
 
-  ch();
+  
 
   init_memory();
 
-  ch();
+  
 
   for (int g = 0; g < nb_chunks; g++)
   {
@@ -612,7 +613,7 @@ void receive_settings(const int sock)
 
   //free_mem = esp_get_free_heap_size();
   //ESP_LOGI(TAG, "free memory %d ", free_mem);
-  ch();
+  
 
   ESP_LOGI(TAG, "nb_chunks %d, nb_rows_chunks %d, chunk_size %d, eink_framebuffer_size %d, chunk_size+extra_bytes %d", nb_chunks, nb_rows_per_chunk, chunk_size, eink_framebuffer_size, chunk_size + extra_bytes);
   memset(line_changed, 0, height_resolution + 2);
@@ -723,7 +724,7 @@ static void tcp_server_task(void *pvParameter)
 
     power_on_driver();
     receive_settings(sock);
-    ch();
+    
 // dma_buffer = epd_get_current_buffer();
 #if FT245MODE == 0
     download_and_extract(sock);

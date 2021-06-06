@@ -29,6 +29,7 @@ int framebuffer_cycles; // sets the number of times to write the current framebu
 int rmt_high_time;      // defined in rmt_pulse.h, a higher value makes blacks blacker and whites whiter
 int framebuffer_cycles_2, framebuffer_cycles_2_threshold;
 int enable_skipping, epd_skip_threshold, epd_skip_mouse_only;
+int draw_white_first;
 int esp32_multithread;
 int selective_compression;
 int extra_bytes;

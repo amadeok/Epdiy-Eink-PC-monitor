@@ -96,7 +96,8 @@ void IRAM_ATTR pc_monitor_feed_display_with_skip(int total_lines_changed)
     framebuffer_cycles_final = framebuffer_cycles;
   for (int i = 0; i < framebuffer_cycles_final; i++)
   {
-    if (mode == 10)
+
+    if (mode == 10 || draw_white_first == 1)
       rmt_time = draw_rmt_times[frame_counter];
     else
       rmt_time = draw_rmt_times[i];
@@ -305,7 +306,7 @@ void IRAM_ATTR pc_monitor_feed_display_multithreaded_v1_one_chunk()
     renderer_frame_counter++;
 
     //  printf("r: %d lp = %d \n", time3, frame_counter);
-    if (renderer_frame_counter == 100)
+    if (renderer_frame_counter == 4294967290)
       renderer_frame_counter = 0;
 
     // frame_counter++;
