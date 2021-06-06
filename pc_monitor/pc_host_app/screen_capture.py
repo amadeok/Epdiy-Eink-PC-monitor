@@ -127,8 +127,11 @@ def main_task(ctx):
                 if linux: ready = os.read(fd1, 1)
                 elif windows: ret2 = win32file.ReadFile(fd1, 1)
 
-            #image_file =    Image.frombytes('RGB', (ctx.width, ctx.height), sct_img.rgb)
-            image_file = Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")  # Image.frombytes('RGB', (ctx.width, ctx.height), rgb)
+            image_file =    Image.frombytes('RGB', (ctx.width, ctx.height), sct_img.rgb)
+            # image_file.save("correct_colors.png")
+
+            # image_file = Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")  # Image.frombytes('RGB', (ctx.width, ctx.height), rgb)
+            # image_file.save("wrong_colors.png")
 
             if ctx.pipe_bit_depth == 8:
                 ctx.mouse_moved = paste_cursor(ctx, image_file)
