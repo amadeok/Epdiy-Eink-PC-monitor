@@ -191,6 +191,11 @@ class display_settings(object):
 
         self.nb_draws = (self.grayscale_shades -1 )
         self.cursor = Image.open('cursor.png')
+        
+        mult = 2
+
+        self.cursor = self.cursor.resize((int(self.cursor.size[0] *mult), int(self.cursor.size[1] *mult)))
+
         if self.draw_white_first: 
             self.nb_draws = self.nb_draws*2
 
