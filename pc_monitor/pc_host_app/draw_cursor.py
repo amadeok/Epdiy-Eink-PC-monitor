@@ -55,7 +55,8 @@ def draw_cursor_1bpp(conf, byte_string_raw):
     width_res2 = conf.width_res2
     height_res2 = conf.height_res2
 
-    global curr_coor
+    global curr_coor; global prev_coor
+    
     if linux:
         prev_coor = curr_coor
         curr_coor = pyautogui.position()
@@ -177,7 +178,7 @@ def draw_cursor_1bpp(conf, byte_string_raw):
         return 0
 
 def did_mouse_move(ctx):
-    global curr_coor
+    global curr_coor; global prev_coor
 
     if linux:
         prev_coor = curr_coor
@@ -263,7 +264,7 @@ def draw_cursor(conf, sct_img):
     width_res2 = conf.width_res2
     height_res2 = conf.height_res2
 
-    global curr_coor
+    global curr_coor; global prev_coor
 
     if linux:
         prev_coor = curr_coor
@@ -320,7 +321,7 @@ def draw_cursor(conf, sct_img):
 def paste_cursor(ctx, image_file):
 
 
-    global curr_coor; global cursor
+    global curr_coor; global prev_coor; global cursor
     if linux:
         prev_coor = curr_coor
         curr_coor = pyautogui.position()
