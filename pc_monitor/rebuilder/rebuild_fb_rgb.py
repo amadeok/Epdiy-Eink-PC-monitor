@@ -6,7 +6,7 @@ l = []
 t0 = time.time()
 nb_draws = int(sys.argv[1])
 print("Number of framebuffers to rebuild:", nb_draws)
-dir = "C:\\Users\\amade\\Documents\\pc_host_app\\"
+dir = os.getcwd() 
 for x in range(nb_draws):
     inp = open(f"{dir}\\eink_framebuffer{x}", "rb" )
     l.append(inp.read())
@@ -78,7 +78,7 @@ for y in range (1):
 
         #joined[f] = a+b+c
 img = Image.frombytes("RGB", (1200, 825), bytes(joined))
-img = img.transpose(Image.FLIP_TOP_BOTTOM) #flip the image so that the first bytes contain the pixel data of the first lines
+img = img.transpose(Image.FLIP_TOP_BOTTOM) 
 img   = img.rotate(180,  expand=True)
 img.save("testj.bmp")
 

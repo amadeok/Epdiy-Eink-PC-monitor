@@ -11,10 +11,10 @@ from PIL import Image
 
 x = 0
 y = 0
-dir = "/home/amadeok/epdiy-working/examples/pc_monitor"
+dir = os.getcwd() 
 n0 = 0
 while x < nb_draws:
-    inp = open(f"/home/amadeok/epdiy-working/examples/pc_monitor/pc_host_app/eink_framebuffer{n0}", "rb" )
+    inp = open(f"{dir}\\eink_framebuffer{n0}", "rb" )
     l.append(inp.read())
     x+=1
     n0+=1
