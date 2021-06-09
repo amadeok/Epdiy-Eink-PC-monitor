@@ -1,19 +1,11 @@
 import os, time, sys
 from PIL import Image
 t_counter = 0
-def t():
-    global t_counter;global t0
-    t_counter+=1
-    if t_counter == 1:
-        t0 = time.time()
-    elif t_counter == 2:
-        t_counter = 0
-        print(time.time()-t0)
-    return time.time()
 
 l = []
-t()
-nb_draws = 2
+t0 = time.time()
+nb_draws = int(sys.argv[1])
+print("Number of framebuffers to rebuild:", nb_draws)
 dir = "C:\\Users\\amade\\Documents\\pc_host_app\\"
 for x in range(nb_draws):
     inp = open(f"{dir}\\eink_framebuffer{x}", "rb" )
@@ -21,7 +13,6 @@ for x in range(nb_draws):
 
 size = 1200 * 825 * 3
 bytearr = []
-print(len(l[0]))
 for x in range(nb_draws):
     bytearr.append(bytearray([0] * size))
 
@@ -91,5 +82,4 @@ img = img.transpose(Image.FLIP_TOP_BOTTOM) #flip the image so that the first byt
 img   = img.rotate(180,  expand=True)
 img.save("testj.bmp")
 
-t()
-
+print("operation took: ", time.time() - t0)

@@ -4,6 +4,8 @@ l = []
 
 cdef int y = 0, x = 0, z = 0, f  = 0, a = 0, b = 0, c = 0
 cdef int nb_draws = 2
+nb_draws = int(sys.argv[1])
+print("Number of framebuffers to rebuild:", nb_draws)
 
 from PIL import Image
 
