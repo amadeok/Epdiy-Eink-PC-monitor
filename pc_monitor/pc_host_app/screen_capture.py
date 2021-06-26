@@ -92,6 +92,10 @@ def main_task(ctx):
             w_shm(ctx.offsets.invert_threshold, ctx.invert, 'a')
             w_shm(ctx.offsets.invert, ctx.invert, 'a')
 
+        w_shm(ctx.offsets.fb1_rmt, ctx.draw_rmt_times[0], 'a')
+        w_shm(ctx.offsets.fb2_rmt, ctx.draw_rmt_times[1], 'a')
+        w_shm(ctx.offsets.invert_draw_times, ctx.invert_draw_times, 'a')
+
     if pipe_output:
         fd1, fd0 = open_pipes(ctx)
 
@@ -180,8 +184,7 @@ def main_task(ctx):
 
                 if invert > 0:
                     if invert == 1: image_file = ImageOps.invert(image_file)
-                    else:   image_file = smart_invert(image_file)
-
+                    else:   image_file = smart_invert(image_file) 
 
 
                 def fn(x): return x
@@ -199,6 +202,9 @@ def main_task(ctx):
 
             else:
                 print("error?")
+
+            update_rmt_times(ctx, image_file)
+
             if mode != 10 and not ctx.draw_white_first:
                 image_file = image_file.transpose(Image.FLIP_TOP_BOTTOM) #flip the image so that the first bytes contain the pixel data of the first lines
             if ctx.rotation != 0:

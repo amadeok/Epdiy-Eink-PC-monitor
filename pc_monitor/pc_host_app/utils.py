@@ -42,6 +42,7 @@ check_for_difference_esp = 1
 working_dir = os.getcwd()
 raw_output_file = f"{working_dir}/image_mode_raw"
 t_counter = 0;t0 = 0
+curr = 0
 
 def t(text=None):
     global t_counter;global t0
@@ -236,6 +237,7 @@ class display_settings(object):
         if self.esp32_multithread and self.draw_white_first:
             print("esp32_multithread and draw_white_first cannot be on at the same time, disabling esp32_multithread")
             self.esp32_multithread = 0
+        self.draw_times_switcher = 0
 
 
 
@@ -461,6 +463,42 @@ def check_and_exit(fd0, fd1):
             except: pass
             ctx.shm_a.close()
         sys.exit(f'Python capture ID {ctx.id} terminated')
+
+
+def update_rmt_times(ctx, image_file):
+
+    global curr
+    prev = curr
+    curr = ctx.draw_times_switcher
+
+    invert_draw_times = r_shm(ctx.offsets.invert_draw_times, 'i')
+    np_arr = np.asarray(image_file)
+    n = np.mean(np_arr) * 256
+    if prev == curr: changed = 0
+    else: changed = 1; #print('changed')
+    #print(n)
+
+    fb1 = r_shm(ctx.offsets.fb1_rmt, 'i')
+    fb2 = r_shm(ctx.offsets.fb2_rmt, 'i')
+
+   # print('fb1: ', fb1, 'fb2: ', fb2)
+
+    if not invert_draw_times or n > 130:
+        ctx.draw_times_switcher= 0
+        if changed: 
+            fb2 = fb1;# print (ctx.draw_times_switcher, fb2, fb1)
+        ctx.pipe_settings[3:3+2] = fb1.to_bytes(2, 'little', signed=False)
+        ctx.pipe_settings[3+2:3+2+2] = fb2.to_bytes(2, 'little', signed=False)
+        
+    else:
+        ctx.draw_times_switcher= 1
+        fb2 -= 50
+        fb1 += 100
+        if changed: 
+            fb2 = fb1;# print (ctx.draw_times_switcher, fb2, fb1)
+        ctx.pipe_settings[3:3+2] = fb2.to_bytes(2, 'little', signed=False)
+        ctx.pipe_settings[3+2:3+2+2] = fb1.to_bytes(2, 'little', signed=False)
+
 def pipe_output_f(raw_files, np_image_file, mouse_moved, fd1, fd0):
     byte_frag = raw_files[0]
 
@@ -470,8 +508,11 @@ def pipe_output_f(raw_files, np_image_file, mouse_moved, fd1, fd0):
 
     ctx.pipe_settings[2] = r_shm(ctx.offsets.mode, 'i')
     #print(ctx.pipe_settings[2])
+
+
     if linux: os.write(fd0, ctx.pipe_settings)
     elif windows: win32file.WriteFile(fd0, ctx.pipe_settings)
+
 
     if check_for_difference_esp == 1:
         #check_for_difference_esp_fun(raw_files[2])
@@ -651,6 +692,13 @@ def check_key_presses(PID_list, conf):
                 w_shm(conf.selective_invert, 1, 'a'),  print("selective_invert is on ", r_shm(conf.selective_invert, 'i'))
                 ctx.selective_invert = 1
 
+        def fun_n(self):
+            invert_draw_times = r_shm(conf.invert_draw_times, 'i')
+            if invert_draw_times != 0:
+                w_shm(conf.invert_draw_times, 0, 'a');  print("invert_draw_times is off ", r_shm(conf.invert_draw_times, 'i'))
+            elif invert_draw_times != 1:
+                w_shm(conf.invert_draw_times, 1, 'a'),  print("invert_draw_times is on ", r_shm(conf.invert_draw_times, 'i'))
+
        # def fun_g(self):
        #     w_shm(conf.mode, 10, 'a');  print("greyscale mode is on ", r_shm(conf.mode, 'i'))
         def fun_w(self): w_shm(conf.polarize_factor, -0.1, 'f');  print("polarize_factor is  ", r_shm(conf.polarize_factor, 'f') + ctx.pole_factor)
@@ -673,6 +721,12 @@ def check_key_presses(PID_list, conf):
         def fun_8(self): w_shm(conf.sharpness, +0.1, 'f')
         def fun_9(self): w_shm(conf.grey_to_monochrome_threshold, -10, 'i')
         def fun_0(self): w_shm(conf.grey_to_monochrome_threshold, +10, 'i')
+
+        def fun_z(self): w_shm(conf.fb1_rmt, -10, 'i'); print("fb1_rmt ", r_shm(conf.fb1_rmt, 'i'))
+        def fun_x(self): w_shm(conf.fb1_rmt, +10, 'i'); print("fb1_rmt ", r_shm(conf.fb1_rmt, 'i'))
+        def fun_c(self): w_shm(conf.fb2_rmt, -10, 'i'); print("fb2_rmt ", r_shm(conf.fb2_rmt, 'i'))
+        def fun_v(self): w_shm(conf.fb2_rmt, +10, 'i'); print("fb2_rmt ", r_shm(conf.fb2_rmt, 'i'))
+
         def fun_y(self):
             w_shm(conf.invert, 2, 'a'); 
             ctx.invert = 2
@@ -796,7 +850,9 @@ class shared_var:
         self.polarize_factor =   offset_object(50, 0,'f')
         self.pole_mode =   offset_object(54, 0,'i')
         self.settings_changed =   offset_object(58, 0,'i')
-
+        self.fb1_rmt =   offset_object(62, 0,'i')
+        self.fb2_rmt =   offset_object(66, 0,'i')
+        self.invert_draw_times =   offset_object(70, 0,'i')
 
 def apply_enhancements(image_file, conf, offsets):
     #t0 = time.time()
