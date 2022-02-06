@@ -175,7 +175,7 @@ class display_settings(object):
         self.twenty_four_bpp = np.full((self.width* self.height * 3), 255, dtype=np.uint8)
         self.np_arr = None
         if self.mode == "4grayscale" or self.draw_white_first:
-            self.nb_chunks == 5
+            self.nb_chunks = 1 #setting to 5 can create problems for v6?
             self.pipe_bit_depth = 8
             self.eight_bpp = np.full((self.width, self.height), 255, dtype=np.uint8)
             self.byte_string_list = [self.eight_bpp, self.eight_bpp]
@@ -185,7 +185,7 @@ class display_settings(object):
             else:
                 self.grayscale_shades = 2 #black and white
         else: 
-            self.nb_chunks = 5
+            self.nb_chunks = 1  #setting to 5 can create problems for v6?
             self.pipe_bit_depth = 1
             self.eight_bpp = None
             self.grayscale_shades = 2
