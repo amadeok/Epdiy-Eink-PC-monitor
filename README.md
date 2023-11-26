@@ -53,7 +53,7 @@ pip install pywin32
 On linux:
 ```bash
 cd
-git clone https://github.com/vroland/epdiy
+git clone -b v5 https://github.com/vroland/epdiy
 
 git clone https://github.com/amadeok/Epdiy-Eink-PC-monitor
 cp -R ~/Epdiy-Eink-PC-monitor/pc_monitor ~/epdiy/examples 
@@ -62,7 +62,7 @@ cp -R ~/Epdiy-Eink-PC-monitor/pc_monitor ~/epdiy/examples
 On windows' command prompt: 
 ```bash
 cd c:\
-git clone https://github.com/vroland/epdiy
+git clone -b v5 https://github.com/vroland/epdiy
 git clone https://github.com/amadeok/Epdiy-Eink-PC-monitor
 Xcopy /E /I C:\Epdiy-Eink-PC-monitor C:\epdiy\examples 
 
@@ -182,21 +182,37 @@ Advanced settings:
 #### Hotkeys:
 It is possible to change the following settings while the application is running by pressing their hotkey on the terminal:
 -*1* decreases *color* by 0.1
+
 -*2* increases *color* by 0.1
+
 -*3* decreases *contrast* by 0.1
+
 -*4* increases *contrast* by 0.1
+
 -*5* decreases *brightness* by 0.1
+
 -*6* increases *brightness* by 0.1
+
 -*7* decreases *sharpness* by 0.1
+
 -*8* increases *sharpness* by 0.1
+
 -*9* increases *grey_monochrome_threshold* by 10
+
 -*0* decreases *grey_monochrome_threshold* by 10
+
 -*b* toggles *enhance_before_greyscale*
+
 -*i* toggles *invert*
+
 -*u* increases *smart invert* threshold by 10 and activates it
+
 -*y* decreases *smart invert* threshold by 10 and activates it
+
 -*s* toggles *selective_invert*
+
 -*d* switches to the mode specified in the configuration file
+
 -*m* switches to monochrome mode
 
 
