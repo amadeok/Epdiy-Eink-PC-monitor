@@ -3,8 +3,8 @@
 #include "i2s_data_bus.h"
 #include "rmt_pulse.h"
 
-#include "display_ops.h"
-
+//#include "display_ops.h"
+#include "ed097oc4.h"
 #include "esp_assert.h"
 #include "esp_heap_caps.h"
 #include "esp_types.h"
