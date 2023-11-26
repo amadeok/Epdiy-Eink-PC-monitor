@@ -26,7 +26,7 @@
 #include "nvs_flash.h"
 #include "pc_monitor.h"
 #include "epd_driver.h"
-#include "display_ops.h"
+//#include "display_ops.h"
 
 #define WIFI_SSID "wifi_ssid"
 #define WIFI_PASS "wifi_password"
@@ -809,7 +809,7 @@ void app_main()
   memset(draw_black_bytes, 85, 129);
   memset(draw_white_bytes, 170, 129);
 
-  epd_base_init(EPD_WIDTH);
-
+  //epd_base_init(EPD_WIDTH);
+epd_init();
   xTaskCreatePinnedToCore(&tcp_server_task, "tcp_server_task", 10000, NULL, 5, NULL, 1);
 }
