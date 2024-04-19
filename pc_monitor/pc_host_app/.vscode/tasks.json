@@ -1,0 +1,69 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "build with MinGW",
+            "type": "shell",
+            "command": "g++",
+            "args": [
+                "-g",
+                "main.cpp",
+                "generate_eink_framebuffer.cpp",
+                "rle_compression.cpp",
+                "utils.cpp",
+                // "-static",
+                "-o",
+                "process_capture.exe",
+                "-I",
+                "include",
+                "-lws2_32",
+                // "-LC:\\Users\\amade\\vcpkg\\packages\\json-c_x64-windows\\lib",
+                // "-ljson-c",
+                "-LC:\\Users\\amade\\cJSON-1.7.17\\build",
+                "-llibcjson",
+                "-I", "C:\\Users\\amade\\cJSON-1.7.17",
+                // "-I", "C:\\Users\\amade\\vcpkg\\packages\\json-c_x64-windows\\include",
+                
+                "-IE:\\Users\\amade\\OpenCV-MinGW-4.5.5\\include",
+                 "-LE:\\Users\\amade\\OpenCV-MinGW-4.5.5\\x64\\mingw\\bin",
+                "-llibopencv_core455",
+                "-llibopencv_imgproc455",
+                "-llibopencv_highgui455",
+                "-llibopencv_imgcodecs455",
+                "-DWITHOPENCV"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "detail": "Compiling C++ file with MinGW",
+            "options": {
+                // "cwd": "pc_monitor\\pc_host_app\\"
+            }
+        },
+        {
+            "type": "cppbuild",
+            "label": "C/C++: g++.exe build active file test",
+            "command": "E:\\msys64\\mingw64\\bin\\g++.exe",
+            "args": [
+                "-fdiagnostics-color=always",
+                "-g",
+                "${file}",
+                "-o",
+                "${fileDirname}\\${fileBasenameNoExtension}.exe",
+                "-IC:\\OpenCV-MinGW-Build\\include", "-LE:\\Users\\amade\\OpenCV-MinGW-4.5.5\\x64\\mingw\\bin", "-llibopencv_calib3d455" 
+            ],
+            "options": {
+                "cwd": "${fileDirname}"
+            },
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "group": "build",
+            "detail": "compiler: E:\\msys64\\mingw64\\bin\\g++.exe"
+        }
+    ]
+}

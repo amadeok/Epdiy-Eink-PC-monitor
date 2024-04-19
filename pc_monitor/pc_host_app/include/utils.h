@@ -24,6 +24,10 @@ void array_to_file(void *array, int nb_bytes_to_write, const char *path, const c
 //Read a file into an array in memory
 void file_to_array(char array[], int array_size, int file_size, const char *path, const char *filename, int k);
 
+void unpackByteReverse(unsigned char byte, unsigned char pixels[4]);
+
+void unpackByte(unsigned char byte, unsigned char pixels[4]);
+
 //Swaps the bytes in the framebuffer to get them in the order that the board needs
 void swap_bytes(char *eink_framebuffer, char *eink_framebuffer_swapped, int eink_framebuffer_size, int source_image_bit_depth);
 

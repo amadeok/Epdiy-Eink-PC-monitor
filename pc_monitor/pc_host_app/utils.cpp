@@ -60,6 +60,18 @@ void file_to_array(char array[], int array_size, int file_size, const char *path
     inFile.close();
 }
 
+void unpackByteReverse(unsigned char byte, unsigned char pixels[4]) {
+    for (int i = 3; i >= 0; --i) {
+        pixels[i] = (byte >> ((3 - i) * 2)) & 0x03;
+    }
+}
+
+void unpackByte(unsigned char byte, unsigned char pixels[4]) {
+    for (int i = 0; i < 4; ++i) {
+        pixels[i] = (byte >> (i * 2)) & 0x03;
+    }
+}
+
 void swap_bytes(char *eink_framebuffer, char *eink_framebuffer_swapped, int eink_framebuffer_size, int source_image_bit_depth)
 { //swapping bytes is necessary to get them in the order that the board needs
     //   long t = getTick();

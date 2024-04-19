@@ -1,0 +1,135 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "(gdb) Attach",
+            "type": "cppdbg",
+            "request": "attach",
+            "program": "C:/-Epdiy-Eink-PC-monitor/pc_monitor/pc_host_app/process_capture.exe",
+            "processId": "${command:pickProcess}",
+            "MIMode": "gdb",
+            "miDebuggerPath": "C:\\msys64\\mingw64\\bin\\gdb.exe",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ]
+        }
+        // {
+        //     "name": "Python Debugger: Current File",
+        //     "type": "debugpy",
+        //     "request": "launch",
+        //     "program": "${file}",
+        //     "console": "integratedTerminal",
+        //     "args": ["display0.conf",  
+        //     // "display1.conf",
+        //     "dw", 
+        //     "dp"
+        // ],
+        //     "cwd": "${fileDirname}"
+        // },
+        {
+            "name": "g++ - Build and debug active file",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceRoot}/process_capture.exe",
+
+            "args": [
+                //"args.json"
+                "C:\\Users\\amade\\AppData\\Local\\Temp\\tmpydozbm8h"
+			//"{\"esp32_ip_address\": \"192.168.1.28\"}",
+            // "\"id\": \"0\"",
+			// "\"width_resolution\": \"1200\"",
+			// "\"height_resolution\": \"825\"",
+            // " \"refresh_every_x_frames\":\"100\"",
+            // " \"framebuffer_cycles\":\"2\"",
+            // " \"rmt_high_time\": \"200\"",
+			// " \"enable_skipping\": \"1\"", 
+			// " \"epd_skip_threshold\": \"70\"",
+            // " \"esp32_multithread\":\"0\"", 
+            // " \"framebuffer_cycles_2\": \"2\"", 
+            // "  \"framebuffer_cycles_2_threshold\":\"76\"", 
+            // " \"mode\": \"0\"", //mode
+            // " \"selective_compression\": \"0\"",
+            // "  \"nb_chunks\":\"1\"", 
+            // "  \"nb_draws\":\"1\"",
+            // "  \"draw_white_first\":\"0\"", 
+            // "  \"\":\"0\"", //mode
+            // "\"cv2\": \"2\"", //cv2
+            // "\"do_full_refresh\": \"0\"", 
+            // "\"disable_logging\":  \"0\"", 
+            // "\"wifi_on\": \"0\""
+         ],
+
+             //   "{
+            //"esp32_ip_address": "192.168.1.28", 
+            //      \"id\": \"0\", 
+            //     \"width_resolution\": \"1200\", 
+            //     \"height_resolution\": \"825\",
+            //      \"refresh_every_x_frames\":\"100\", 
+            //      \"framebuffer_cycles\":\"2\", 
+            //      \"rmt_high_time\": \"200\",
+            //      \"enable_skipping\": \"1\", 
+            //      \"epd_skip_threshold\": \"70\",
+            //      \"esp32_multithread\":\"0\", 
+            //      \"framebuffer_cycles_2\": \"2\", 
+            //       \"framebuffer_cycles_2_threshold\":\"76\", 
+            //      \"mode\": \"0\", //mode
+            //      \"selective_compression\": \"0\",
+            //       \"nb_chunks\":\"1\", 
+            //       \"nb_draws\":\"1\",
+            //       \"draw_white_first\":\"0\", 
+            //       \"\":\"0\", //mode
+            //    \"cv2\": \"2\", //cv2
+            //    \"do_full_refresh\": \"0\", 
+            //    \"disable_logging\":  \"0\", 
+            //    \"wifi_on\": \"0\"
+            //   }"
+    
+             ],
+            // "args": [
+            //     "192.168.1.28",
+            //     "0",
+            //     "1200",
+            //     "825",
+            //     "100", //refresh_every
+            //     "2", //framebuffer_cycles
+            //     "200",
+            //     "1",
+            //     "70",
+            //     "0", //esp32_multithread
+            //     "2", //framebuffer_cycles_2
+            //     "76", //framebuffer_cycles_2_threshold
+            //     "0", //mode
+            //     "0", //selective_compression
+            //     "1", //nb_chunks
+            //     "1", //nb_draws
+            //     "0", //draw_white_first
+            //     "0", //mode
+            //     "2", //cv2
+            //     "0", //do_full_refresh
+            //     "0", //disable_logging
+            //     "0" //wifi_on
+            // ],
+            "stopAtEntry": false,
+            "cwd": "${fileDirname}",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ],
+            "preLaunchTask": "build with MinGW",
+            "miDebuggerPath": "C:\\msys64\\mingw64\\bin\\gdb.exe"
+        }
+    ]
+}

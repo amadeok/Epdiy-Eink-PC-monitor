@@ -1,4 +1,6 @@
 import platform, ctypes
+import configparser
+import json
 
 from numpy.lib.type_check import imag
 
@@ -23,7 +25,14 @@ from collections import namedtuple
 from PIL import Image, ImageChops, ImageEnhance, ImageOps
 from multiprocessing import shared_memory, resource_tracker, Value
 
+from enum import Enum
 
+class withCv2Enum(Enum):
+    NONE = 0
+    PYTHON = 1
+    CPP = 2
+    BOTH = 3
+    
 working_dir = os.getcwd()
 
 exiting = 0
@@ -31,7 +40,7 @@ settings_changed = 0
 
 display_list = []
 display_conf = []
-
+quit_all  = False
 save_raw_file = 0
 open_from_disk = 0
 save_chunck_files = 0
@@ -66,21 +75,30 @@ def get_mode(dict, mode_code):
 
 def eval_args(self):
     args = str(sys.argv)
-    if "-silent" in sys.argv:
-        self.disable_logging = 1; sys.argv.remove("-silent")
+    if "silent" in sys.argv:
+        self.disable_logging = 1; sys.argv.remove("silent")
     else: self.disable_logging = 0
     if "child" in sys.argv:
         self.child_process = 1; sys.argv.remove("child")
     else: self.child_process = 0
+    if "nokeychecker" in sys.argv:
+        self.nokeychecker = 1; sys.argv.remove("nokeychecker")
+    else: self.nokeychecker = 0
     if "dw" in sys.argv:
         self.disable_wifi = 1; sys.argv.remove("dw")
     else: self.disable_wifi = 0
-    if "-common" in sys.argv: 
-        self.common = 1; sys.argv.remove("-common")
+    if "common" in sys.argv: 
+        self.common = 1; sys.argv.remove("common")
     else: self.common = 0
     if "dp" in sys.argv: 
         self.start_cpp_process = 0; sys.argv.remove("dp")
     else: self.start_cpp_process  = 1
+    for i, a in enumerate(sys.argv):
+        if "override_ip" in a:
+            self.overr_ip_address = a.split(":")[1]
+            del sys.argv[i]
+            break
+
     nb_arg = len(sys.argv)
     nb_displays = nb_arg -1
     return nb_displays
@@ -105,8 +123,18 @@ def setup_shared_memory(self):
 
     self.offsets = shared_var()
 
+def parse_value(value):
+    try:
+        return int(value)
+    except ValueError:
+        try:
+            return float(value)
+        except ValueError:
+            return value
+        
 class args_eval:
     def __init__(self):
+        self.overr_ip_address = None
         pass
 class display_settings(object):
     def get_dith(self):
@@ -122,30 +150,50 @@ class display_settings(object):
         print(self.log, "Resize resolution: ", self.resize_w, self.resize_h)
 
     def __init__(self, names, args, configuration_file):
-        def get_val(val):
-            n = 0
-            for c in val:
-                if c == '.': n+=1
-                if c == ',': n+=1
-            if n> 1:
-                return val
-            elif n == 1: return float(val)
-            elif '-' in val:
-                val = val.lstrip("-")
-                val = int(val)- int(val)*2
-                return val
-            elif val.isdigit():
-                return int(val)
-            else: return val
+        
+        # with open(configuration_file, 'r') as file:
+        
+        #     data = json.load(file)
 
-            #else: return val
-        try:
-            # Support space-separated name strings
-            names = names.split()
-        except AttributeError:
-            pass
-        for name in names:
-            setattr(self, name[0][:-1], get_val(name[1]))
+        #     for element in data:
+        #         # Print each element
+        #         setattr(self, name, parse_value(value))
+
+        config = configparser.ConfigParser()
+        config.read(configuration_file)
+        for section_name in config.sections():
+            for name, value in config.items(section_name):
+                print( '  %s = %s' % (name, value))
+                setattr(self, name, parse_value(value))
+                
+        try:  getattr(self, "with_cv2")
+        except:  self.with_cv2 = 0
+
+            
+        # def get_val(val):
+        #     n = 0
+        #     for c in val:
+        #         if c == '.': n+=1
+        #         if c == ',': n+=1
+        #     if n> 1:
+        #         return val
+        #     elif n == 1: return float(val)
+        #     elif '-' in val:
+        #         val = val.lstrip("-")
+        #         val = int(val)- int(val)*2
+        #         return val
+        #     elif val.isdigit():
+        #         return int(val)
+        #     else: return val
+
+        #     #else: return val
+        # try:
+        #     # Support space-separated name strings
+        #     names = names.split()
+        # except AttributeError:
+        #     pass
+        # for name in names:
+        #     setattr(self, name[0][:-1], get_val(name[1]))
         self.a = args
         self.width_res2 = self.width + self.x_offset
         self.height_res2 = self.height + self.y_offset
@@ -164,7 +212,6 @@ class display_settings(object):
 
         self.dif_list_sum = 1
         self.switcher = 0
-
         self.dif_list = bytearray(self.height+2)
         self.dif_list_ori = bytearray(self.height+2) 
         self.configuration_file = configuration_file
@@ -197,24 +244,7 @@ class display_settings(object):
         if self.nb_draws> self.framebuffer_cycles: 
             self.nb_rmt_times = self.nb_draws
         else: self.nb_rmt_times = self.framebuffer_cycles
-        self.pipe_settings = bytearray(b'\x00\x00\x00')
-        if isinstance(self.rmt_high_time , str):
-            self.draw_rmt_times = self.rmt_high_time.split(':')
-        else: self.draw_rmt_times = [str(self.rmt_high_time)]
-
-        for q in range(len(self.draw_rmt_times)):
-            self.draw_rmt_times[q] = int(self.draw_rmt_times[q]);
-            if q < self.nb_rmt_times:
-                self.pipe_settings += self.draw_rmt_times[q].to_bytes(2, 'little')
-        if len(self.draw_rmt_times) < self.nb_rmt_times:
-            #print("Warning: not enough rmt high times for each framebuffer cycle have been specified")
-            dif = self.nb_rmt_times - len(self.draw_rmt_times)
-            for w in range(dif):
-                self.draw_rmt_times.append(self.draw_rmt_times[0]);
-                if q < self.nb_rmt_times:
-                    self.pipe_settings += self.draw_rmt_times[0].to_bytes(2, 'little')
-
-        self.pipe_settings_size = len(self.pipe_settings)
+        self.setup_settings_bytearray()
         if self.esp32_multithread:
             self.nb_chunks = 1
         self.mouse_moved = 0
@@ -232,6 +262,27 @@ class display_settings(object):
             print("esp32_multithread and draw_white_first cannot be on at the same time, disabling esp32_multithread")
             self.esp32_multithread = 0
 
+    def setup_settings_bytearray(self):
+        self.pipe_settings = bytearray(b'\x00\x00\x00')
+        if isinstance(self.rmt_high_time , str):
+            self.draw_rmt_times = self.rmt_high_time.split(':')
+        else: self.draw_rmt_times = [str(self.rmt_high_time)]
+
+        for q in range(len(self.draw_rmt_times)):
+            self.draw_rmt_times[q] = int(self.draw_rmt_times[q]);
+            if q < max(self.nb_rmt_times, 2):
+                self.pipe_settings += self.draw_rmt_times[q].to_bytes(2, 'little')
+        if len(self.draw_rmt_times) < self.nb_rmt_times:
+            #print("Warning: not enough rmt high times for each framebuffer cycle have been specified")
+            dif = self.nb_rmt_times - len(self.draw_rmt_times)
+            for w in range(dif):
+                self.draw_rmt_times.append(self.draw_rmt_times[0]);
+                if q < self.nb_rmt_times:
+                    self.pipe_settings += self.draw_rmt_times[0].to_bytes(2, 'little')
+
+        self.pipe_settings_size = len(self.pipe_settings)
+        print("pipe_settings_size", self.pipe_settings_size)
+
 
 
 def read_file(conf_file):
@@ -245,23 +296,25 @@ def read_file(conf_file):
     return display_conf
 
 def read_dither_method(ctx):
-
-    new_conf = read_file(ctx.configuration_file)
+    config = configparser.ConfigParser()
+    config.read(ctx.configuration_file)
+    #new_conf = read_file(ctx.configuration_file)
     prev = ctx.mode
     selected = prev
-    for elem in new_conf:
-        if elem[0] == 'mode:':
-            if elem[1] in modes.keys():
-                #print(f"{ctx.log} Mode is: ", elem[1])
-                return  elem[1]
+    #for elem in new_conf:
+    #if elem[0] == 'mode:':
+    new_mode = config["main"]["mode"]
+    if new_mode in modes.keys():
+        #print(f"{ctx.log} Mode is: ", elem[1])
+        return  new_mode
 
-            elif prev in modes.keys():
-                print(f"{ctx.log} Invalid dither method selected, setting: ", prev)
-                return prev
+    elif prev in modes.keys():
+        print(f"{ctx.log} Invalid dither method selected, setting: ", prev)
+        return prev
 
-            else:
-                print("Invalid dither method selected, setting monochrome") 
-                return "monochrome"
+    else:
+        print("Invalid dither method selected, setting monochrome") 
+        return "monochrome"
 
 def get_display_settings(conf_file, args):
     display_conf = read_file(conf_file)
@@ -428,22 +481,28 @@ def check_for_difference_esp_fun(array_list, mss_raw=None):
     ctx.dif_list = ctx.dif_list_ori[:]
     if not mss_raw:
         for v in range(ctx.height):
-            if ctx.dif_list_ori[v] == 1:
+            if ctx.dif_list_ori[v] == 1 or 1:
                 ctx.dif_list[v+1] = 1
                 ctx.dif_list[v+2] = 1
             
     ctx.dif_list_sum = dif_list_sum
 
     return dif_list_sum
+
 def check_and_exit(fd0, fd1):
+    global quit_all
     if ctx.a.child_process ==  0:
         end_val = exiting
     else: end_val = ctx.shared_buffer[0]
 
     if end_val == 101:
-
-        if linux: os.write(fd0, ctx.shared_buffer[0:2])
-        elif windows: win32file.WriteFile(fd0, ctx.shared_buffer[0:2])
+        try:
+            if linux: os.write(fd0, ctx.shared_buffer[0:2])
+            elif windows: win32file.WriteFile(fd0, ctx.shared_buffer[0:2])
+        except Exception as e:
+            print(f"check and exit e {e}")
+            quit_all = True
+            return -1
 
         time.sleep(0.5)
         if ctx.a.child_process == 0:
@@ -455,18 +514,72 @@ def check_and_exit(fd0, fd1):
             try: resource_tracker.unregister(ctx.shm_a._name, 'shared_memory')
             except: pass
             ctx.shm_a.close()
+<<<<<<< Updated upstream
         sys.exit(f'Python capture ID {ctx.id} terminated')
+=======
+        print(f'Python capture ID {ctx.id} terminating..')
+        quit_all = True
+        sys.exit("")
+
+
+
+def update_rmt_times(ctx, image_file):
+
+    global curr
+    prev = curr
+    curr = ctx.draw_times_switcher
+
+    invert_draw_times = r_shm(ctx.offsets.invert_draw_times, 'i')
+    np_arr = np.asarray(image_file)
+    n = np.mean(np_arr) * 256
+    if prev == curr: changed = 0
+    else: changed = 1; #print('changed')
+    #print(n)
+
+    fb1 = r_shm(ctx.offsets.fb1_rmt, 'i')
+    fb2 = r_shm(ctx.offsets.fb2_rmt, 'i')
+
+   # print('fb1: ', fb1, 'fb2: ', fb2)
+
+    if not invert_draw_times or n > 130:
+        ctx.draw_times_switcher= 0
+        if changed: 
+            fb2 = fb1;# print (ctx.draw_times_switcher, fb2, fb1)
+        ctx.pipe_settings[3:3+2] = fb1.to_bytes(2, 'little', signed=False)
+        ctx.pipe_settings[3+2:3+2+2] = fb2.to_bytes(2, 'little', signed=False)
+        
+    else:
+        ctx.draw_times_switcher= 1
+        fb2 -= 50
+        fb1 += 100
+        if changed: 
+            fb2 = fb1;# print (ctx.draw_times_switcher, fb2, fb1)
+        ctx.pipe_settings[3:3+2] = fb2.to_bytes(2, 'little', signed=False)
+        ctx.pipe_settings[3+2:3+2+2] = fb1.to_bytes(2, 'little', signed=False)
+
+>>>>>>> Stashed changes
 def pipe_output_f(raw_files, np_image_file, mouse_moved, fd1, fd0):
+    global quit_all
     byte_frag = raw_files[0]
 
-    check_and_exit(fd0,fd1)
+    if check_and_exit(fd0,fd1) == -1:
+        quit_all = True
+        return -1
 
     ctx.pipe_settings[1] = mouse_moved
 
     ctx.pipe_settings[2] = r_shm(ctx.offsets.mode, 'i')
     #print(ctx.pipe_settings[2])
+<<<<<<< Updated upstream
     if linux: os.write(fd0, ctx.pipe_settings)
     elif windows: win32file.WriteFile(fd0, ctx.pipe_settings)
+=======
+
+    s = len(ctx.pipe_settings)
+    if linux: os.write(fd0, ctx.pipe_settings)
+    elif windows: win32file.WriteFile(fd0, ctx.pipe_settings)
+    
+>>>>>>> Stashed changes
 
     if check_for_difference_esp == 1:
         #check_for_difference_esp_fun(raw_files[2])
@@ -710,17 +823,17 @@ def check_key_presses(PID_list, conf):
             except: pass
 
 
-        else:
+        elif not ctx.a.nokeychecker:
             ret0 = s.indirect(x) 
 
-        
-        try: 
-            n = int(x); 
-            if n >= 0 and n <= 9:
-                w_shm(conf.settings_changed, 2, 'a')
-                #print(f"color {r_shm(conf.color, 'f')}, contrast  {r_shm(conf.contrast, 'f')}  brightness {r_shm(conf.brightness, 'f')}, sharpness {r_shm(conf.sharpness, 'f')},  grey_to_monochrome_threshold {r_shm(conf.grey_to_monochrome_threshold, 'i')}")
-              
-        except:  w_shm(conf.settings_changed, 1, 'a')
+        if not ctx.a.nokeychecker:
+            try: 
+                n = int(x); 
+                if n >= 0 and n <= 9:
+                    w_shm(conf.settings_changed, 2, 'a')
+                    #print(f"color {r_shm(conf.color, 'f')}, contrast  {r_shm(conf.contrast, 'f')}  brightness {r_shm(conf.brightness, 'f')}, sharpness {r_shm(conf.sharpness, 'f')},  grey_to_monochrome_threshold {r_shm(conf.grey_to_monochrome_threshold, 'i')}")
+                
+            except:  w_shm(conf.settings_changed, 1, 'a')
 
 
 
@@ -868,6 +981,7 @@ def convert_to_greyscale_and_enhance(image_file, conf):
 
 args = args_eval() 
 nb_displays = eval_args(args)
+
 
 for x in range(nb_displays):
     get_display_settings(sys.argv[x+1], args)

@@ -4,6 +4,7 @@ import mss
 import os, sys
 import pyautogui
 from PIL import Image, ImageEnhance, ImageOps
+import tempfile
 
 import time
 import subprocess
@@ -23,66 +24,79 @@ if os.path.isdir(work_dir):
 PID_list = []
 pid0 = os.getpid()
 PID_list.append(pid0)
+proc_list = []
 
 
 for u in range(nb_displays-1):
     if ctx.a.disable_logging:         
-        P = subprocess.Popen([f'python',  'screen_capture.py',  f'{sys.argv[u+2]}', '-silent', 'child'])
+        P = subprocess.Popen([f'python',  'screen_capture.py',  f'{sys.argv[u+2]}', 'silent', 'child'])
     else:
-        P = subprocess.Popen([f'python3',  'screen_capture.py',  sys.argv[u+2], 'child'])
+        P = subprocess.Popen([f'python',  'screen_capture.py',  sys.argv[u+2], 'child'])
     PID_list.append(P.pid)
     time.sleep(0.5)
 
-    
+
 if ctx.a.child_process == 0:
 
     if pipe_output and ctx.a.start_cpp_process :
         ctx.shared_buffer[0:100] = bytearray(100)
         if windows:
             binary = "process_capture.exe"
+            binary = "proc_cap.bat" #this seems to fix the bullshit random errors
         elif linux:
             binary = "process_capture"
         for x in range(nb_displays):  
             time.sleep(0.5)
-
-            R = subprocess.Popen([f'{working_dir}/{binary}', 
-            f'{display_list[x].ip_address}',
-            f'{display_list[x].id}',
-            f'{display_list[x].width}',
-            f'{display_list[x].height}',
-            f'{display_list[x].refresh_every_x_frames}',
-            f'{display_list[x].framebuffer_cycles}', 
-            f'{display_list[x].rmt_high_time}',
-            f'{display_list[x].enable_skipping}',
-            f'{display_list[x].epd_skip_threshold}',
-            f'{display_list[x].esp32_multithread}', 
-          #  f'{display_list[x].epd_skip_mouse_only}',
-            f'{display_list[x].framebuffer_cycles_2}',
-            f'{display_list[x].framebuffer_cycles_2_threshold}',
-            f'{modes[display_list[x].mode]}',
-            f'{display_list[x].selective_compression}',
-            f'{display_list[x].nb_chunks}', 
-            f'{display_list[x].nb_draws}', 
-            f'{display_list[x].draw_white_first}', 
-            f'{modes[display_list[x].mode]}', 
-
-            f'{display_list[x].do_full_refresh}', 
-
-            f'{display_list[x].a.disable_logging}',
-            f'{ctx.wifi_on}'])
-
+            
+            data = {
+                "esp32_ip_address": display_list[x].ip_address,
+                "id": display_list[x].id,
+                "width_resolution": display_list[x].width,
+                "height_resolution": display_list[x].height,
+                "refresh_every_x_frames": display_list[x].refresh_every_x_frames,
+                "framebuffer_cycles": display_list[x].framebuffer_cycles,
+                "rmt_high_time": display_list[x].rmt_high_time,
+                "enable_skipping": display_list[x].enable_skipping,
+                "epd_skip_threshold": display_list[x].epd_skip_threshold,
+                "esp32_multithread": display_list[x].esp32_multithread,
+                "framebuffer_cycles_2": display_list[x].framebuffer_cycles_2,
+                "framebuffer_cycles_2_threshold": display_list[x].framebuffer_cycles_2_threshold,
+                "mode": modes[display_list[x].mode],
+                "selective_compression": display_list[x].selective_compression,
+                "nb_chunks": display_list[x].nb_chunks,
+                "nb_draws": display_list[x].nb_draws,
+                "draw_white_first": display_list[x].draw_white_first,
+                "with_cv2": display_list[x].with_cv2,
+                "do_full_refresh": display_list[x].do_full_refresh,
+                "disable_logging": display_list[x].a.disable_logging,
+                "wifi_on": ctx.wifi_on,
+                "refresh_on_startup": display_list[x].refresh_on_startup,              
+            }
+            temp_file_path = ""
+            with tempfile.NamedTemporaryFile(delete=False, mode="w") as temp_file:
+                json.dump(data, temp_file, indent=4)
+                print(temp_file.name)
+                temp_file_path = temp_file.name
+                
+            R = subprocess.Popen([f'{working_dir}/{binary}', temp_file_path],  creationflags=subprocess.CREATE_NEW_CONSOLE)
             ctx.has_childs = 1
-
+            print(f"---------proc cap id {id} {R.pid}")
             PID_list.append(R.pid)
+            proc_list.append(R)
+
+            print()
+
     else:   
         pid1 = None
 
 
-if ctx.a.child_process == 0:
+if ctx.a.child_process == 0 :
+    print("STARTING KEY PRESS CHECKER")
     thread1 = threading.Thread(target=check_key_presses, args=(PID_list, ctx.offsets))
     thread1.start()
 
 def main_task(ctx):
+    global quit_all
     if ctx.a.child_process == 0:
         w_shm(ctx.offsets.mode, modes.get(ctx.mode), 'a')
         w_shm(ctx.offsets.selective_invert, ctx.selective_invert, 'a')
@@ -119,8 +133,12 @@ def main_task(ctx):
                 time.sleep(ctx.sleep_time/1000)
                 check_and_exit(fd0,fd1)
                 #print_settings()
+                if ctx.with_cv2 == withCv2Enum.PYTHON.value or  ctx.with_cv2 == withCv2Enum.BOTH.value:
+                    cv2.waitKey(1)
+                if quit_all: break
                 continue
-
+            if quit_all: break
+            
             if pipe_output:
                 if linux: ready = os.read(fd1, 1)
                 elif windows: ret2 = win32file.ReadFile(fd1, 1)
@@ -150,10 +168,11 @@ def main_task(ctx):
 
                 image_file = convert_to_greyscale_and_enhance(image_file, ctx)
                 th = ctx.grey_monochrome_threshold+r_shm(ctx.offsets.grey_to_monochrome_threshold, 'i')
-                
+               
                 def fn(x): return 255 if x > th else 0
 
                 image_file = image_file.point(fn, mode='1')
+                
 
             elif mode > 0 and mode < 9: #other dithering
                 image_file = convert_to_greyscale_and_enhance(image_file, ctx)
@@ -194,6 +213,27 @@ def main_task(ctx):
 
             else:
                 print("error?")
+<<<<<<< Updated upstream
+=======
+            if ctx.with_cv2 == withCv2Enum.PYTHON.value or  ctx.with_cv2 == withCv2Enum.BOTH.value:
+                grayscale_image = image_file.convert("L")
+                opencv_image = cv2.cvtColor(np.array(grayscale_image), cv2.COLOR_GRAY2BGR)
+                pos = pyautogui.position()
+                cursor_x = pos.x
+                cursor_y = pos.y
+                cursor_color = (0, 255, 0)  # Green color
+                radius = 5
+                thickness = -1  # Fill the circle
+                xx = cursor_x - ctx.x_offset
+                yy =  cursor_y - ctx.y_offset
+                cv2.circle(opencv_image, (xx,yy), radius, cursor_color, thickness)
+
+                cv2.imshow(f"PIL to OpenCV {ctx.id}", opencv_image)
+                cv2.waitKey(1)
+            
+            update_rmt_times(ctx, image_file)
+
+>>>>>>> Stashed changes
             if mode != 10 and not ctx.draw_white_first:
                 image_file = image_file.transpose(Image.FLIP_TOP_BOTTOM) #flip the image so that the first bytes contain the pixel data of the first lines
             if ctx.rotation != 0:
@@ -222,5 +262,15 @@ def main_task(ctx):
                 print(f"Display ID: {ctx.id}, capture took {took}ms")
 
             time.sleep(ctx.sleep_time/1000)
+            
 
+<<<<<<< Updated upstream
 main_task(ctx)
+=======
+main_task(ctx)
+print("waiting for other procs..")
+for proc in proc_list:
+    print("a proc returned...")
+    proc.wait()
+print("all procs returned")
+>>>>>>> Stashed changes
