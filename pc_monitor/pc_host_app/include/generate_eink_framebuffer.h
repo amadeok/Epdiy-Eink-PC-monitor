@@ -12,3 +12,5 @@ void quantize(char *source_8bpp_current, char *source_8bpp_modified_current, int
 
  // Generate eink framebuffer and attempt to reduce ghosting (experimental)
 void generate_eink_framebuffer_v2_with_ghost(char *source_8bpp_current, char *source_8bpp_previous, char *source_8bpp_modified_previous,  char **eink_framebuffer, int nb_pixels_to_change);
+
+int get_n_lines_changed_1bpp(char *eink_framebuffer, char* line_changed, int rotation);

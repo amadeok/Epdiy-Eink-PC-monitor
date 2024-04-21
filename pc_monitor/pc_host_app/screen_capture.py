@@ -36,26 +36,15 @@ for u in range(nb_displays-1):
     time.sleep(0.5)
 
 
-if ctx.a.child_process == 0:
-
-    if pipe_output and ctx.a.start_cpp_process :
-        ctx.shared_buffer[0:100] = bytearray(100)
-        if windows:
-            binary = "process_capture.exe"
-            binary = "proc_cap.bat" #this seems to fix the bullshit random errors
-        elif linux:
-            binary = "process_capture"
-        for x in range(nb_displays):  
-            time.sleep(0.5)
-            
-            data = {
+def get_json_file(x):
+    data = {
                 "esp32_ip_address": display_list[x].ip_address,
                 "id": display_list[x].id,
                 "width_resolution": display_list[x].width,
                 "height_resolution": display_list[x].height,
                 "refresh_every_x_frames": display_list[x].refresh_every_x_frames,
                 "framebuffer_cycles": display_list[x].framebuffer_cycles,
-                "rmt_high_time": display_list[x].rmt_high_time,
+                "rmt_high_time": display_list[x].rmt_high_times,
                 "enable_skipping": display_list[x].enable_skipping,
                 "epd_skip_threshold": display_list[x].epd_skip_threshold,
                 "esp32_multithread": display_list[x].esp32_multithread,
@@ -72,11 +61,26 @@ if ctx.a.child_process == 0:
                 "wifi_on": ctx.wifi_on,
                 "refresh_on_startup": display_list[x].refresh_on_startup,              
             }
-            temp_file_path = ""
-            with tempfile.NamedTemporaryFile(delete=False, mode="w") as temp_file:
-                json.dump(data, temp_file, indent=4)
-                print(temp_file.name)
-                temp_file_path = temp_file.name
+    temp_file_path = ""
+    with tempfile.NamedTemporaryFile(delete=False, mode="w") as temp_file:
+        json.dump(data, temp_file, indent=4)
+        print(temp_file.name)
+        temp_file_path = temp_file.name
+    return temp_file_path
+
+if ctx.a.child_process == 0:
+
+    if pipe_output and ctx.a.start_cpp_process :
+        ctx.shared_buffer[0:100] = bytearray(100)
+        if windows:
+            binary = "process_capture.exe"
+            binary = "proc_cap.bat" #this seems to fix the bullshit random errors
+        elif linux:
+            binary = "process_capture"
+        for x in range(nb_displays):  
+            time.sleep(0.5)
+            
+            temp_file_path = get_json_file(x)
                 
             R = subprocess.Popen([f'{working_dir}/{binary}', temp_file_path],  creationflags=subprocess.CREATE_NEW_CONSOLE)
             ctx.has_childs = 1
@@ -86,7 +90,10 @@ if ctx.a.child_process == 0:
 
             print()
 
-    else:   
+    else: 
+        for x in range(nb_displays):  
+            
+            print("conf file",os.path.basename(get_json_file(x)))
         pid1 = None
 
 
@@ -115,6 +122,8 @@ def main_task(ctx):
     with mss.mss() as sct:
         capture_list = [sct.grab(ctx.monitor).raw, sct.grab(ctx.monitor).raw]
         while 1:
+            t0 = time.time()
+
             if ctx.switcher == 0:
                 ctx.switcher = 1;
             else:
@@ -213,27 +222,6 @@ def main_task(ctx):
 
             else:
                 print("error?")
-<<<<<<< Updated upstream
-=======
-            if ctx.with_cv2 == withCv2Enum.PYTHON.value or  ctx.with_cv2 == withCv2Enum.BOTH.value:
-                grayscale_image = image_file.convert("L")
-                opencv_image = cv2.cvtColor(np.array(grayscale_image), cv2.COLOR_GRAY2BGR)
-                pos = pyautogui.position()
-                cursor_x = pos.x
-                cursor_y = pos.y
-                cursor_color = (0, 255, 0)  # Green color
-                radius = 5
-                thickness = -1  # Fill the circle
-                xx = cursor_x - ctx.x_offset
-                yy =  cursor_y - ctx.y_offset
-                cv2.circle(opencv_image, (xx,yy), radius, cursor_color, thickness)
-
-                cv2.imshow(f"PIL to OpenCV {ctx.id}", opencv_image)
-                cv2.waitKey(1)
-            
-            update_rmt_times(ctx, image_file)
-
->>>>>>> Stashed changes
             if mode != 10 and not ctx.draw_white_first:
                 image_file = image_file.transpose(Image.FLIP_TOP_BOTTOM) #flip the image so that the first bytes contain the pixel data of the first lines
             if ctx.rotation != 0:
@@ -264,13 +252,4 @@ def main_task(ctx):
             time.sleep(ctx.sleep_time/1000)
             
 
-<<<<<<< Updated upstream
 main_task(ctx)
-=======
-main_task(ctx)
-print("waiting for other procs..")
-for proc in proc_list:
-    print("a proc returned...")
-    proc.wait()
-print("all procs returned")
->>>>>>> Stashed changes

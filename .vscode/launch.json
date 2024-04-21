@@ -5,59 +5,86 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Python Debugger: starter.py",
+            "name": "flash_many.py",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/pc_monitor/pc_host_app/flash_many.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/pc_monitor/pc_host_app/",
+
+        },
+        {
+            "name": "Current py File",
+            "type": "debugpy",
+            "request": "launch",
+            "cwd": "${workspaceFolder}/pc_monitor/pc_host_app/",
+            "program": "${file}",
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "starter.py",
             "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}/pc_monitor/pc_host_app/starter.py",
             "console": "integratedTerminal",
             "args": [
                 // "--ports", "COM16", "COM17",  
-                 "--labels", "top_left", "bottom_left",  "top_right", "bottom_right", 
-             //    "--labels", "top_left", "top_right", 
-                   "--added_args", 
-                   "common",
-                  //"dw",
+                //    "--labels", "top_left", "bottom_left",  "top_right", "bottom_right", 
+                //    "--labels", "top_left", "top_right", 
+                "--added_args",
+                "common",
+                //"dw",
                 //  "dp",
-                //"--labels", "top_right", 
+                "--labels",
+                "top_left",
                 //python starter.py --labels top_left bottom_left top_right bottom_right  --added_args common
-
-        ],
+            ],
             "cwd": "${workspaceFolder}/pc_monitor/pc_host_app/"
         },
         {
-            "name": "Python Debugger: Current File",
+            "name": "scren_capture.py",
             "type": "debugpy",
             "request": "launch",
-            "program": "${file}",
+            "program": "${workspaceFolder}/pc_monitor/pc_host_app/screen_capture.py",
             "console": "integratedTerminal",
-            "args": ["display0.conf",  
-            // "display1.conf",
-           //  "dw", 
-           //   "dp",
-            // "override_ip:192.168.1.28"
-        ],
-            "cwd": "${fileDirname}"
+            "args": [
+                "display0.conf",
+                // "display1.conf",
+                //  "dw", 
+                //    "dp",
+                // "override_ip:192.168.1.28"
+            ],
+            "cwd": "${workspaceFolder}/pc_monitor/pc_host_app/"
         },
         {
             "name": "g++ - Build and debug active file",
             "type": "cppdbg",
             "request": "launch",
             "program": "${fileDirname}/process_capture.exe",
-            "args": ["192.168.1.1", "0", "1200", "825", "100", "2", "200", "1",  "70",
-             "0", //esp32_multithread
-              "2",  //framebuffer_cycles_2
-              "76", //framebuffer_cycles_2_threshold
-              "0", //mode
-              "0", //selective_compression
-              "1", //nb_chunks
-              "1",  //nb_draws
-              "0", //draw_white_first
-              "0", //mode
-            "1", //cv2
-            "0", "0",
-            "0" //wifi_on
-
-         ],
+            "args": [
+                "192.168.1.1",
+                "0",
+                "1200",
+                "825",
+                "100",
+                "2",
+                "200",
+                "1",
+                "70",
+                "0", //esp32_multithread
+                "2", //framebuffer_cycles_2
+                "76", //framebuffer_cycles_2_threshold
+                "0", //mode
+                "0", //selective_compression
+                "1", //nb_chunks
+                "1", //nb_draws
+                "0", //draw_white_first
+                "0", //mode
+                "1", //cv2
+                "0",
+                "0",
+                "0" //wifi_on
+            ],
             "stopAtEntry": false,
             "cwd": "${fileDirname}",
             "environment": [],

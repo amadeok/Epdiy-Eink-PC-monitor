@@ -130,7 +130,10 @@ def parse_value(value):
         try:
             return float(value)
         except ValueError:
-            return value
+            try:
+                return  json.loads(value)
+            except:
+                return value
         
 class args_eval:
     def __init__(self):
@@ -221,7 +224,7 @@ class display_settings(object):
         self.twenty_four_bpp = np.full((self.width* self.height * 3), 255, dtype=np.uint8)
         self.np_arr = None
         if self.mode == "4grayscale" or self.draw_white_first:
-            self.nb_chunks == 5
+            self.nb_chunks ==  1  #5 breaks things
             self.pipe_bit_depth = 8
             self.eight_bpp = np.full((self.width, self.height), 255, dtype=np.uint8)
             self.byte_string_list = [self.eight_bpp, self.eight_bpp]
@@ -231,7 +234,7 @@ class display_settings(object):
             else:
                 self.grayscale_shades = 2 #black and white
         else: 
-            self.nb_chunks = 5
+            self.nb_chunks = 1 #5 breaks things
             self.pipe_bit_depth = 1
             self.eight_bpp = None
             self.grayscale_shades = 2
@@ -263,25 +266,40 @@ class display_settings(object):
             self.esp32_multithread = 0
 
     def setup_settings_bytearray(self):
-        self.pipe_settings = bytearray(b'\x00\x00\x00')
-        if isinstance(self.rmt_high_time , str):
-            self.draw_rmt_times = self.rmt_high_time.split(':')
-        else: self.draw_rmt_times = [str(self.rmt_high_time)]
-
-        for q in range(len(self.draw_rmt_times)):
-            self.draw_rmt_times[q] = int(self.draw_rmt_times[q]);
-            if q < max(self.nb_rmt_times, 2):
-                self.pipe_settings += self.draw_rmt_times[q].to_bytes(2, 'little')
-        if len(self.draw_rmt_times) < self.nb_rmt_times:
-            #print("Warning: not enough rmt high times for each framebuffer cycle have been specified")
-            dif = self.nb_rmt_times - len(self.draw_rmt_times)
-            for w in range(dif):
-                self.draw_rmt_times.append(self.draw_rmt_times[0]);
-                if q < self.nb_rmt_times:
-                    self.pipe_settings += self.draw_rmt_times[0].to_bytes(2, 'little')
-
-        self.pipe_settings_size = len(self.pipe_settings)
-        print("pipe_settings_size", self.pipe_settings_size)
+        # line_changed_pos = ((self.height*self.width)//4)*2 #size of  wifi_transfer_buffer in c++
+        # line_changed_pos -= self.height+2
+        self.pipe_settings = {"signal": -1,
+                              "mouse_moved": 0,
+                              "mode": self.mode, 
+                              "do_full_refresh": self.do_full_refresh,
+                              "rmt_high_times": self.rmt_high_times,
+                              "notes": "",
+                              "wifi_transfer_size": -1,
+                            #   "framebuffer_data_pos": -1,
+                              "framebuffer_data_size": -1,
+                             # "line_changed_pos":  -1 ,
+                              "draw_count": -1,
+                              "total_lines_changed": -1,
+                              "need_to_extract": -1,
+                              "rotation": self.rotation
+                              }# bytearray(b'\x00\x00\x00')
+        print()
+        # if isinstance(self.rmt_high_time , str):
+        #     self.draw_rmt_times = self.rmt_high_time.split(':')
+        # else: self.draw_rmt_times = [str(self.rmt_high_time)]
+        # for q in range(len(self.draw_rmt_times)):
+        #     self.draw_rmt_times[q] = int(self.draw_rmt_times[q]);
+        #     if q < max(self.nb_rmt_times, 2):
+        #         self.pipe_settings += self.draw_rmt_times[q].to_bytes(2, 'little')
+        # if len(self.draw_rmt_times) < self.nb_rmt_times:
+        #     #print("Warning: not enough rmt high times for each framebuffer cycle have been specified")
+        #     dif = self.nb_rmt_times - len(self.draw_rmt_times)
+        #     for w in range(dif):
+        #         self.draw_rmt_times.append(self.draw_rmt_times[0]);
+        #         if q < self.nb_rmt_times:
+        #             self.pipe_settings += self.draw_rmt_times[0].to_bytes(2, 'little')
+        # self.pipe_settings_size = len(self.pipe_settings)
+        # print("pipe_settings_size", self.pipe_settings_size)
 
 
 
@@ -514,50 +532,8 @@ def check_and_exit(fd0, fd1):
             try: resource_tracker.unregister(ctx.shm_a._name, 'shared_memory')
             except: pass
             ctx.shm_a.close()
-<<<<<<< Updated upstream
-        sys.exit(f'Python capture ID {ctx.id} terminated')
-=======
-        print(f'Python capture ID {ctx.id} terminating..')
-        quit_all = True
-        sys.exit("")
-
-
-
-def update_rmt_times(ctx, image_file):
-
-    global curr
-    prev = curr
-    curr = ctx.draw_times_switcher
-
-    invert_draw_times = r_shm(ctx.offsets.invert_draw_times, 'i')
-    np_arr = np.asarray(image_file)
-    n = np.mean(np_arr) * 256
-    if prev == curr: changed = 0
-    else: changed = 1; #print('changed')
-    #print(n)
-
-    fb1 = r_shm(ctx.offsets.fb1_rmt, 'i')
-    fb2 = r_shm(ctx.offsets.fb2_rmt, 'i')
-
-   # print('fb1: ', fb1, 'fb2: ', fb2)
-
-    if not invert_draw_times or n > 130:
-        ctx.draw_times_switcher= 0
-        if changed: 
-            fb2 = fb1;# print (ctx.draw_times_switcher, fb2, fb1)
-        ctx.pipe_settings[3:3+2] = fb1.to_bytes(2, 'little', signed=False)
-        ctx.pipe_settings[3+2:3+2+2] = fb2.to_bytes(2, 'little', signed=False)
-        
-    else:
-        ctx.draw_times_switcher= 1
-        fb2 -= 50
-        fb1 += 100
-        if changed: 
-            fb2 = fb1;# print (ctx.draw_times_switcher, fb2, fb1)
-        ctx.pipe_settings[3:3+2] = fb2.to_bytes(2, 'little', signed=False)
-        ctx.pipe_settings[3+2:3+2+2] = fb1.to_bytes(2, 'little', signed=False)
-
->>>>>>> Stashed changes
+        os._exit(0)
+        #sys.exit(f'Python capture ID {ctx.id} terminated')
 def pipe_output_f(raw_files, np_image_file, mouse_moved, fd1, fd0):
     global quit_all
     byte_frag = raw_files[0]
@@ -566,20 +542,21 @@ def pipe_output_f(raw_files, np_image_file, mouse_moved, fd1, fd0):
         quit_all = True
         return -1
 
-    ctx.pipe_settings[1] = mouse_moved
-
-    ctx.pipe_settings[2] = r_shm(ctx.offsets.mode, 'i')
-    #print(ctx.pipe_settings[2])
-<<<<<<< Updated upstream
-    if linux: os.write(fd0, ctx.pipe_settings)
-    elif windows: win32file.WriteFile(fd0, ctx.pipe_settings)
-=======
-
-    s = len(ctx.pipe_settings)
-    if linux: os.write(fd0, ctx.pipe_settings)
-    elif windows: win32file.WriteFile(fd0, ctx.pipe_settings)
+    ctx.pipe_settings["mouse_moved"] = ord('m') if  mouse_moved else 0
     
->>>>>>> Stashed changes
+    ctx.pipe_settings["mode"] =  r_shm(ctx.offsets.mode, 'i')
+    
+    ctx.pipe_settings["do_full_refresh"] =  ctx.do_full_refresh
+
+    ser_pipe_settings = json.dumps(ctx.pipe_settings).encode('utf-8')
+
+    ser_pipe_settings_s = struct.pack('<H', len(ser_pipe_settings))
+
+    if linux: os.write(fd0, ser_pipe_settings_s)
+    elif windows: win32file.WriteFile(fd0, ser_pipe_settings_s)
+    
+    if linux: os.write(fd0, ctx.pipe_settings)
+    elif windows: win32file.WriteFile(fd0, bytes(ser_pipe_settings))
 
     if check_for_difference_esp == 1:
         #check_for_difference_esp_fun(raw_files[2])

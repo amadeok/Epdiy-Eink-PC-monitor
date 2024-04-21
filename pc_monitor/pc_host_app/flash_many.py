@@ -62,7 +62,7 @@ def move_window(window_handle, x, y):
 
 def main():
     serial_ports = ["COM19", "COM18", "COM16", "COM17"]  # Adjust this according to your system
-    serial_ports = serial_ports
+    serial_ports = serial_ports[0:1]
     chip_type = "esp32"  # Adjust this according to your ESP chip
     baud_rate = 691200# 460800  # Adjust this according to your preference
 
@@ -78,7 +78,7 @@ def main():
         p = subprocess.Popen(["python", "flasher2.py", port, binary_file], creationflags=subprocess.CREATE_NEW_CONSOLE)
         time.sleep(1)
         h = get_window_handle_from_pid(p.pid)
-        move_window(h, 0, i*400)
+        move_window(h, 0, i*600)
         procs.append(p)
         
     for thread in procs:

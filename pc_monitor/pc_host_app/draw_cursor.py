@@ -177,7 +177,6 @@ def draw_cursor_1bpp(conf, byte_string_raw):
         return 0
 
 def did_mouse_move(ctx):
-<<<<<<< Updated upstream
     global curr_coor
     prev_coor.x = curr_coor.x
     prev_coor.y = curr_coor.y
@@ -188,20 +187,6 @@ def did_mouse_move(ctx):
         pos = win32gui.GetCursorPos()
         curr_coor.x = pos[0]; curr_coor.y = pos[1]
 
-=======
-    global curr_coor; global prev_coor
-    try:
-        if linux:
-            prev_coor = curr_coor
-            curr_coor = pyautogui.position()
-        elif windows: 
-            prev_coor.x = curr_coor.x
-            prev_coor.y = curr_coor.y
-            pos = win32gui.GetCursorPos()
-            curr_coor.x = pos[0]; curr_coor.y = pos[1]
-    except Exception as e:
-        print(f"error getting cursor pos {e}")
->>>>>>> Stashed changes
     if curr_coor.x >= ctx.x_offset and curr_coor.x <= ctx.width_res2 and curr_coor.y >= ctx.y_offset and curr_coor.y <= ctx.height_res2-22:
         if prev_coor.x == curr_coor.x and prev_coor.y == curr_coor.y:
           #  print(f" not moved px {prev_coor.x}, cx {curr_coor.x}, py {prev_coor.y}, cy {curr_coor.y}")

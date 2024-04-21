@@ -316,3 +316,67 @@ void generate_eink_framebuffer_v2_with_ghost(char *source_8bpp_current, char *so
         //     array_to_file(eink_framebuffer, 230400, working_dir, "eink_framebuffer", 0);
     }
 }
+
+extern int height_resolution;
+extern int width_resolution;
+
+int get_n_lines_changed_1bpp(char *eink_framebuffer, char* line_changed, int rotation)
+{
+    int tot = 0;
+    int padding = rotation == 180 ? 1 : 15;
+    for (int y = 0; y < height_resolution; y++)
+    {
+        line_changed[y] = 0;
+        for (int x = 0; x < width_resolution / 4; x++)
+        {
+            int xy = (y * (width_resolution / 4)) + x;
+            uint8_t n = eink_framebuffer[xy];
+            switch (n)
+            {
+            case 255:
+                break;
+            case 192:
+                break;
+            case 48:
+                break;
+            case 12:
+                break;
+            case 3:
+                break;
+            case 240:
+                break;
+            case 15:
+                break;
+            case 252:
+                break;
+            case 63:
+                break;
+            case 60:
+                break;
+            case 195:
+                break;
+            case 204:
+                break;
+            case 51:
+                break;
+            case 207:
+                break;
+            case 243:
+                break;
+            case 0:break;
+            default:
+                tot++;
+                //    printf("| %d - %d ", y, n);
+                for (int yy = y - padding; yy < y + padding; yy++)
+                    if (yy >= 0 && yy < height_resolution - 2)
+                        line_changed[yy] = 1;
+
+                y += padding;
+                break;
+            }
+            if (line_changed[y])
+                break;
+        }
+    }
+ //   printf("\n");
+}
