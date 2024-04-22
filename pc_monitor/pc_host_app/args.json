@@ -1,21 +1,44 @@
 {
-    "esp32_ip_address": "192.168.1.27",
+    "esp32_ip_address": "192.168.1.29",
     "id": 1,
     "width_resolution": 1200,
     "height_resolution": 825,
     "refresh_every_x_frames": 0,
-    "framebuffer_cycles": 2,
-    "rmt_high_time": "250:250",
-    "enable_skipping": 0,
-    "epd_skip_threshold": 75,
-    "esp32_multithread": 0,
-    "framebuffer_cycles_2": 2,
-    "framebuffer_cycles_2_threshold": 76,
+    "draws_conf": {
+        "draw_list": [
+            {
+                "type": "white",
+                "rmt_high_times": [
+                    200,
+                    200,
+                    200,
+                    200,
+                    200,
+                    200,
+                    200,
+                    200
+                ]
+            },
+            {
+                "type": "black",
+                "rmt_high_times": [
+                    100,
+                    100,
+                    100,
+                    100,
+                    100,
+                    100
+                ]
+            }
+        ]
+    },
+    "enable_skipping": 1,
+    "epd_skip_threshold": 8000,
+    "esp32_multithread": 1,
     "mode": 0,
     "selective_compression": 0,
     "nb_chunks": 1,
-    "nb_draws": 1,
-    "draw_white_first": 0,
+    "nb_draws": 2,
     "with_cv2": 2,
     "do_full_refresh": 0,
     "disable_logging": 0,

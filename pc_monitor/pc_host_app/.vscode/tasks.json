@@ -24,13 +24,13 @@
                 "-I", "C:\\Users\\amade\\cJSON-1.7.17",
                 // "-I", "C:\\Users\\amade\\vcpkg\\packages\\json-c_x64-windows\\include",
                 
-                // "-IE:\\Users\\amade\\OpenCV-MinGW-4.5.5\\include",
-                //  "-LE:\\Users\\amade\\OpenCV-MinGW-4.5.5\\x64\\mingw\\bin",
-                // "-llibopencv_core455",
-                // "-llibopencv_imgproc455",
-                // "-llibopencv_highgui455",
-                // "-llibopencv_imgcodecs455",
-                // "-DWITHOPENCV"
+                "-IE:\\Users\\amade\\OpenCV-MinGW-4.5.5\\include",
+                 "-LE:\\Users\\amade\\OpenCV-MinGW-4.5.5\\x64\\mingw\\bin",
+                "-llibopencv_core455",
+                "-llibopencv_imgproc455",
+                "-llibopencv_highgui455",
+                "-llibopencv_imgcodecs455",
+                "-DWITHOPENCV"
             ],
             "group": {
                 "kind": "build",

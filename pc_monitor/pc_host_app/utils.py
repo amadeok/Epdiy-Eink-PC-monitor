@@ -123,7 +123,7 @@ def setup_shared_memory(self):
 
     self.offsets = shared_var()
 
-def parse_value(value):
+def parse_value(value:str):
     try:
         return int(value)
     except ValueError:
@@ -131,6 +131,8 @@ def parse_value(value):
             return float(value)
         except ValueError:
             try:
+                value= value.replace("\n", "")
+                value= value.replace("\r", "")
                 return  json.loads(value)
             except:
                 return value
@@ -155,9 +157,7 @@ class display_settings(object):
     def __init__(self, names, args, configuration_file):
         
         # with open(configuration_file, 'r') as file:
-        
         #     data = json.load(file)
-
         #     for element in data:
         #         # Print each element
         #         setattr(self, name, parse_value(value))
@@ -223,30 +223,31 @@ class display_settings(object):
         self.settings_dither = 0
         self.twenty_four_bpp = np.full((self.width* self.height * 3), 255, dtype=np.uint8)
         self.np_arr = None
-        if self.mode == "4grayscale" or self.draw_white_first:
+        self.nb_draws = len(self.draws_conf["draw_list"])
+        if self.mode == "4grayscale" or self.nb_draws > 1: # or draw_white_first
             self.nb_chunks ==  1  #5 breaks things
             self.pipe_bit_depth = 8
             self.eight_bpp = np.full((self.width, self.height), 255, dtype=np.uint8)
             self.byte_string_list = [self.eight_bpp, self.eight_bpp]
-            if self.mode == "4grayscale":
-                self.grayscale_shades = 4
-                self.framebuffer_cycles = 1
-            else:
-                self.grayscale_shades = 2 #black and white
+            # if self.mode == "4grayscale":
+            #     self.grayscale_shades = 4
+            #     #self.framebuffer_cycles = 1
+            # else:
+            #     self.grayscale_shades = 2 #black and white
         else: 
             self.nb_chunks = 1 #5 breaks things
             self.pipe_bit_depth = 1
             self.eight_bpp = None
-            self.grayscale_shades = 2
+           # self.grayscale_shades = 2
 
-        self.nb_draws = (self.grayscale_shades -1 )
-        self.cursor = Image.open('cursor.png')
-        if self.draw_white_first: 
-            self.nb_draws = self.nb_draws*2
+#        self.nb_draws = (self.grayscale_shades -1 )
+        self.cursor = Image.open('imgs\cursor_thick_alpha_big.png')
+        # if self.draw_white_first: 
+        #     self.nb_draws = self.nb_draws*2
 
-        if self.nb_draws> self.framebuffer_cycles: 
-            self.nb_rmt_times = self.nb_draws
-        else: self.nb_rmt_times = self.framebuffer_cycles
+        # if self.nb_draws> self.framebuffer_cycles: 
+        #     self.nb_rmt_times = self.nb_draws
+        # else: self.nb_rmt_times = self.framebuffer_cycles
         self.setup_settings_bytearray()
         if self.esp32_multithread:
             self.nb_chunks = 1
@@ -261,9 +262,9 @@ class display_settings(object):
         self.pole_factor = float(self.polarize.split(',')[0])
         self.pole_pivot = int(self.polarize.split(',')[1])
         self.pole_mode = self.polarize.split(',')[2]
-        if self.esp32_multithread and self.draw_white_first:
-            print("esp32_multithread and draw_white_first cannot be on at the same time, disabling esp32_multithread")
-            self.esp32_multithread = 0
+        # if self.esp32_multithread and self.draw_white_first:
+        #     print("esp32_multithread and draw_white_first cannot be on at the same time, disabling esp32_multithread")
+        #     self.esp32_multithread = 0
 
     def setup_settings_bytearray(self):
         # line_changed_pos = ((self.height*self.width)//4)*2 #size of  wifi_transfer_buffer in c++
@@ -272,7 +273,8 @@ class display_settings(object):
                               "mouse_moved": 0,
                               "mode": self.mode, 
                               "do_full_refresh": self.do_full_refresh,
-                              "rmt_high_times": self.rmt_high_times,
+                              "draws_conf": self.draws_conf,
+                              #"rmt_high_times": self.rmt_high_times,
                               "notes": "",
                               "wifi_transfer_size": -1,
                             #   "framebuffer_data_pos": -1,
@@ -436,8 +438,8 @@ def get_raw_pixels(image_file, file_path, save_raw_file, switcher):
         ctx.byte_string_list[switcher] = np.asarray(image_file, dtype=np.uint8)
         byte_string_raw = None
 
-    if check_for_difference_esp == 1:
-        check_for_difference_esp_fun(ctx.byte_string_list)
+    # if check_for_difference_esp == 1:
+    #     check_for_difference_esp_fun(ctx.byte_string_list)
 
     return [ctx.byte_string_list[switcher], byte_string_raw, ctx.byte_string_list]
 
@@ -558,11 +560,10 @@ def pipe_output_f(raw_files, np_image_file, mouse_moved, fd1, fd0):
     if linux: os.write(fd0, ctx.pipe_settings)
     elif windows: win32file.WriteFile(fd0, bytes(ser_pipe_settings))
 
-    if check_for_difference_esp == 1:
-        #check_for_difference_esp_fun(raw_files[2])
-
-        if linux: os.write(fd0, ctx.dif_list[0:ctx.height])
-        elif windows: win32file.WriteFile(fd0, ctx.dif_list[0:ctx.height])
+    # if check_for_difference_esp == 1:
+    #     #check_for_difference_esp_fun(raw_files[2])
+    #     if linux: os.write(fd0, ctx.dif_list[0:ctx.height])
+    #     elif windows: win32file.WriteFile(fd0, ctx.dif_list[0:ctx.height])
     
     if linux: os.write(fd0, byte_frag)
     elif windows: win32file.WriteFile(fd0, byte_frag)

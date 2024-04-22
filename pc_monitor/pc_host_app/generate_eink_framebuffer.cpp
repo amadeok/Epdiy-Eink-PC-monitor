@@ -8,7 +8,7 @@
 #include <string>
 #include <generate_eink_framebuffer.h>
 
-extern int total_nb_pixels, refres_every_x_frames, nb_draws, draw_white_first;
+extern int total_nb_pixels, refres_every_x_frames, nb_draws;
 extern char working_dir[256];
 int debug_grayscale = 1;
 
@@ -30,20 +30,22 @@ void *generate_eink_framebuffer_v1(unsigned char *source_1bpp, char *padded_2bpp
     // array_to_file(padded_2bpp_framebuffer_current, 10000, working_dir, "padded_2bpp_framebuffer_current", 0);
 }
 
-void generate_eink_framebuffer_v2(char *source_8bpp_current, char *source_8bpp_previous, char *source_8bpp_modified_previous, char **eink_framebuffer, int mode)
-{ //generate eink framebuffer from 8bpp monochrome capture, slower than v1
-    if (mode != 10 || draw_white_first)
+
+void generate_eink_framebuffer_v2(char *source_8bpp_current, char *source_8bpp_previous, char *source_8bpp_modified_previous, char **eink_framebuffer, int mode, std::vector<draw_conf>& draws_conf)
+{ // generate eink framebuffer from 8bpp monochrome capture, slower than v1
+    int nb_draws = draws_conf.size();
+    
+    
+    unsigned char temp_masks[50];
+    int cur = 0, prev = 0;
+
+    for (int x = 0; x < nb_draws; x++)
+        memset(eink_framebuffer[x], 0, total_nb_pixels / 4);
+
+    int draws = nb_draws> 1  ? nb_draws / 2 : 0; // draw_white_first == 1 ? nb_draws / 2 : 0;
+
+    if (1) // to do, maybe: mode != FourShadesGrayscale || draw_white_first
     {
-        unsigned char temp_masks[50];
-        int cur = 0, prev = 0, draws;
-
-        for (int x = 0; x < nb_draws; x++)
-            memset(eink_framebuffer[x], 0, total_nb_pixels / 4);
-        if (draw_white_first == 1)
-            draws = nb_draws / 2;
-        else
-            draws = 0;
-
         //memset(source_8bpp_previous, 255, total_nb_pixels);
         // array_to_file(source_8bpp_current, total_nb_pixels, working_dir, "source_8bpp_current", 0);
         //array_to_file(source_8bpp_previous, total_nb_pixels, working_dir, "source_8bpp_previous", 0);
@@ -89,7 +91,20 @@ void generate_eink_framebuffer_v2(char *source_8bpp_current, char *source_8bpp_p
 
             for (int k = 0; k < nb_draws; k++)
             {
-                eink_framebuffer[k][delta_counter] |= temp_masks[k];
+                switch (draws_conf[k].typeID)
+                {
+                case drawTypeEnum::black_and_white:
+                    eink_framebuffer[k][delta_counter] |= temp_masks[1];
+                    eink_framebuffer[k][delta_counter] |= temp_masks[0];
+                    break;
+                case drawTypeEnum::black:
+                    eink_framebuffer[k][delta_counter] |= temp_masks[1];
+                    break;
+                case drawTypeEnum::white:
+                    eink_framebuffer[k][delta_counter] |= temp_masks[0];
+                    break;
+                }
+                //  eink_framebuffer[k][delta_counter] |= temp_masks[k];
             }
         }
         // for (int k = 0; k < nb_draws; k++)
@@ -103,16 +118,6 @@ void generate_eink_framebuffer_v2(char *source_8bpp_current, char *source_8bpp_p
     }
     else
     {
-        unsigned char temp_masks[50];
-        int cur = 0, prev = 0, draws;
-
-        for (int x = 0; x < nb_draws; x++)
-            memset(eink_framebuffer[x], 0, total_nb_pixels / 4);
-        if (draw_white_first == 1)
-            draws = nb_draws / 2;
-        else
-            draws = 0;
-
         //memset(source_8bpp_previous, 255, total_nb_pixels);
         // array_to_file(source_8bpp_current, total_nb_pixels, working_dir, "source_8bpp_current", 0);
         //array_to_file(source_8bpp_previous, total_nb_pixels, working_dir, "source_8bpp_previous", 0);
@@ -156,7 +161,7 @@ void generate_eink_framebuffer_v2(char *source_8bpp_current, char *source_8bpp_p
                     switch (prev)
                     {
                     case 0:
-                        if (draw_white_first == 0)
+                        if (nb_draws> 1  == 0) // to do wtf
                             temp_masks[0] |= 2 << y * 2; // make pixel whiter
                         break;
                     case 85:
@@ -179,13 +184,13 @@ void generate_eink_framebuffer_v2(char *source_8bpp_current, char *source_8bpp_p
                         for (int q = 0; q < 1; q++)
                         {
                             temp_masks[q] |= 2 << y * 2; // make pixel whiter
-                            if (draw_white_first == 0)
+                            if (nb_draws> 1  == 0) // to do wtf
                                 temp_masks[1] |= 2 << y * 2; // make pixel whiter
                         }
 
                         break;
                     case 85:
-                        if (draw_white_first == 0)
+                        if (nb_draws> 1  == 0) // to do wtf
                             temp_masks[0] |= 2 << y * 2; // make pixel whiter
                         break;
                     case 170:
@@ -379,4 +384,5 @@ int get_n_lines_changed_1bpp(char *eink_framebuffer, char* line_changed, int rot
         }
     }
  //   printf("\n");
+ return tot;
 }

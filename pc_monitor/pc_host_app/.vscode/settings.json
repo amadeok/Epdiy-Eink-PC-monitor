@@ -44,6 +44,9 @@
         "xstring": "cpp",
         "xtr1common": "cpp",
         "xutility": "cpp",
-        "cassert": "cpp"
+        "cassert": "cpp",
+        "vector": "cpp",
+        "xtree": "cpp",
+        "map": "cpp"
     }
 }

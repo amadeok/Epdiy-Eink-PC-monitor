@@ -12,6 +12,7 @@
 #include <sys/types.h>
 #include <dirent.h>
 #include <errno.h>
+#include <vector>
 
 #ifdef __linux__
 #include <sys/socket.h>
@@ -28,7 +29,6 @@
 #include <rle_compression.h>
 #include <generate_eink_framebuffer.h>
  #include <cJSON.h>
-
 
 #define FT245MODE 0
 
@@ -65,6 +65,7 @@ char transfer_message[TRANSFER_MESSAGE_SIZE];
 
 int wifi_on = 1;
 char *ready2;
+int start_nb_draws;
 
 char *decompressed;                   // for testing or debugging
 unsigned char *decompressed_received; // for testing or debugging
@@ -76,8 +77,8 @@ char *tmp_array;
 char *compressed_eink_framebuffer_ptrs[16]; //array of pointers pointing to chunks of framebuffer
 int id, refresh_every_x_frames = 0, refresh_every_x_frames_, selective_compression;
 
-int total_nb_pixels, eink_framebuffer_size, chunk_size, nb_chunks, nb_draws, nb_rmt_times;
-int source_image_bit_depth = 1, mode = -1, draw_white_first, esp32_multithread;
+int total_nb_pixels, eink_framebuffer_size, chunk_size, nb_chunks, nb_rmt_times;
+int source_image_bit_depth = 1, mode = -1, esp32_multithread;
 int with_cv2 = 0;
 bool disable_logging;
 int mouse_moved = 0;
@@ -87,7 +88,7 @@ int do_full_refresh = 1;
 char ready0[6];
 char ready1[6];
 //char *per_frame_wifi_settings;
-uint16_t *draw_rmt_times;
+// uint16_t *draw_rmt_times;
 uint32_t loop_counter[1] = {0};
 
 char input_pipe[200];
@@ -103,14 +104,6 @@ DWORD dwBytesWritten;
 #endif
 
 
-// struct perFrameSettings {
-//     int signal;
-//     int mouse_moved;
-//     int mode;
-//     bool do_full_refresh;
-//     int rmt_high_times;
-//     std::string notes;
-// };
 
 void wifi_transfer(char *eink_framebuffer_swapped, int eink_framebuffer_size, cJSON* per_frame_settings_json)
 {
@@ -203,7 +196,7 @@ void wifi_transfer(char *eink_framebuffer_swapped, int eink_framebuffer_size, cJ
     ret2 = send(socket_desc, transfer_message, TRANSFER_MESSAGE_SIZE, 0);
    // int ret0 = recv(socket_desc, ready2, per_frame_settings_size, 0);
 
-  //  char * json_ser = cJSON_Print(root);
+   //std::cout  << std::string(cJSON_Print(per_frame_settings_json)) << "\n";
 
     ret2 = send(socket_desc, json_serialized, per_frame_settings_size, 0);
     ret2 = send(socket_desc, line_changed, (height_resolution) * sizeof(unsigned char), 0);
@@ -367,7 +360,12 @@ static int mirroring_task()
         compressed_eink_framebuffer_ptrs[h] = (char *)calloc(chunk_size * 2, sizeof(char));
         //added_compression_arr[h] = (uint16_t *)calloc(chunk_size * 2, sizeof(char));
     }
-    for (int h = 0; h < nb_draws; h++)
+
+    const int preallocated_eink_framebuffer_n = 2;
+    for (int h = 0; h < 16; h++)
+        eink_framebuffer[h] = nullptr;
+
+    for (int h = 0; h < preallocated_eink_framebuffer_n; h++)
         eink_framebuffer[h] = (char *)calloc(eink_framebuffer_size, sizeof(char));
 
     if (source_image_bit_depth == 1)
@@ -384,23 +382,22 @@ static int mirroring_task()
         printf("unsupported bit depth\n");
         return -1;
     }
-    if (draw_white_first && mode == 10)
-        white_pixel = 255;
-    else
-        white_pixel = 1;
+
+     white_pixel = start_nb_draws > 1 && mode == FourShadesGrayscale ? 255 : 1;
+    
     memset(source_8bpp_current, white_pixel, total_nb_pixels * sizeof(unsigned char));
     memset(source_8bpp_modified_current, white_pixel, total_nb_pixels * sizeof(unsigned char));
     memset(source_8bpp_previous, white_pixel, total_nb_pixels * sizeof(unsigned char));
 
-    int total[] = {1}, repeat_counter = 0, next = 0;
-    char *eight_bpp_ptr;
+    int tot_lines_changed[] = {1}, repeat_counter = 0, next = 0;
+    
 
     printf("C++ ID %d mirroring started \n", id);
 
     while (1)
     {
 
-        if (total[0] != 0 && wifi_on == 1) // if screen didn't change don't wait for ack from board
+        if (tot_lines_changed[0] != 0 && wifi_on == 1) // if screen didn't change don't wait for ack from board
             recv(socket_desc, ready0, 6, 0);
 
         ret2 = pipe_write(fd1, ack, 1, ret2);
@@ -426,81 +423,89 @@ static int mirroring_task()
         }
         auto root_ = per_frame_settings_json_root;
 
-        int signal= cJSON_GetObjectItemCaseSensitive(root_, "signal")->valueint;
-        mouse_moved= cJSON_GetObjectItemCaseSensitive(root_, "mouse_moved")->valueint;
-        mode= cJSON_GetObjectItemCaseSensitive(root_, "mode")->valueint;
-        do_full_refresh= cJSON_GetObjectItemCaseSensitive(root_, "do_full_refresh")->valueint;
-        cJSON * rmt_high_times = cJSON_GetObjectItemCaseSensitive(root_, "rmt_high_times");
-        std::string notes(cJSON_GetObjectItemCaseSensitive(root_, "notes")->valuestring);
-        int rotation = cJSON_GetObjectItemCaseSensitive(root_, "rotation")->valueint;
+        int signal = cJSON_GetObjectItem(root_, "signal")->valueint;
+        mouse_moved = cJSON_GetObjectItem(root_, "mouse_moved")->valueint;
+        mode = cJSON_GetObjectItem(root_, "mode")->valueint;
+        do_full_refresh = cJSON_GetObjectItem(root_, "do_full_refresh")->valueint;
+        std::string notes(cJSON_GetObjectItem(root_, "notes")->valuestring);
+        int rotation = cJSON_GetObjectItem(root_, "rotation")->valueint;
 
-        //  cJSON *numbers_array = cJSON_GetObjectItem(rmt_high_times, "main");
-        // if (numbers_array != NULL && cJSON_IsArray(numbers_array)) {
-        //     int array_size = cJSON_GetArraySize(numbers_array);
-        //     printf("Array size: %d\n", array_size);
-        //     printf("Elements in the array:\n");
-        //     for (int i = 0; i < array_size; i++) {
-        //         cJSON *element = cJSON_GetArrayItem(numbers_array, i);
-        //         if (cJSON_IsNumber(element)) {
-        //             printf("%d\n", element->valueint);
-        //         }
-        //     }
+        cJSON *draws_conf = cJSON_GetObjectItem(root_, "draws_conf");
+        cJSON *draw_list = cJSON_GetObjectItem(draws_conf, "draw_list");
+        int nb_draws = cJSON_GetArraySize(draw_list);
+        cJSON_AddNumberToObject(draws_conf, "nb_draws", nb_draws);
+
+        if (nb_draws > preallocated_eink_framebuffer_n)
+            for (int i = preallocated_eink_framebuffer_n; i < nb_draws; i++)
+                eink_framebuffer[i] = (char *)calloc(eink_framebuffer_size, sizeof(char));
+
+        // cJSON *numbers_array = cJSON_GetObjectItem(rmt_high_times, "main");
+        //if (numbers_array != NULL && cJSON_IsArray(numbers_array)) {
+          //  int array_size = cJSON_GetArraySize(draw_list);
+        // printf("nb_draws: %d\n", nb_draws);
+        std::vector< draw_conf>  draws_conf_array;
+        for (int i = 0; i < nb_draws; i++)
+        {
+            draw_conf conf;
+
+            cJSON *element = cJSON_GetArrayItem(draw_list, i);
+            conf.json_element = element;
+            conf.type = cJSON_GetObjectItem(element, "type")->valuestring;
+            cJSON *rmt_high_times = cJSON_GetObjectItem(element, "rmt_high_times");
+            conf.rmt_high_times_n = cJSON_GetArraySize(rmt_high_times);
+         //   printf("draw %d  | type %s | rmt_high_times_n %d || ", i, conf.type, conf.rmt_high_times_n);
+            cJSON_AddNumberToObject(element, "rmt_high_times_n", conf.rmt_high_times_n);
+            for (int i = 0; i < conf.rmt_high_times_n; i++)
+            {
+                conf.rmt_high_times[i] = cJSON_GetArrayItem(rmt_high_times, i)->valueint;
+            //    printf(" %d ", conf.rmt_high_times[i]);
+            }
+            conf.typeID =  draw_type_map.find(std::string(conf.type))->second;
+            
+            draws_conf_array.push_back(conf);
+          //  printf("\n");
+        }
+       //std::cout << "JSON Object:\n"   << std::string(cJSON_Print(root_)) << std::endl;
+
         // }
 
-       // memcpy(draw_rmt_times, ack2 + 3, nb_rmt_times * sizeof(uint16_t));
-       // mode = ack2[2];
+        // memcpy(draw_rmt_times, ack2 + 3, nb_rmt_times * sizeof(uint16_t));
+        // mode = ack2[2];
 
-        if (mode == 10 || draw_white_first)
-            refresh_every_x_frames_ = refresh_every_x_frames * nb_draws;
-        else
-            refresh_every_x_frames_ = refresh_every_x_frames;
-            
+        //        refresh_every_x_frames_ = mode == FourShadesGrayscale || draw_white_first ? refresh_every_x_frames * nb_draws : refresh_every_x_frames;
+
         if (signal == 101) //ack2[0]
         {
             printf("C++ app ID %d exiting \n", id);
             close(socket_desc);
             exit(EXIT_SUCCESS);
         }
-       // mouse_moved = mode == 1 ? 1 : 0;
-        // if (ack2[1] == 1)
-        // {
-        //     mouse_moved = 1;
-        //     // printf("moved\n");
-        // }
-        // else
-        // {
-        //     mouse_moved = 0;
-        //     //   printf("not moved\n");
-        // }
 
-        if (mode == 10 || draw_white_first == 1)
+        char *eight_bpp_ptr = mode == FourShadesGrayscale ? source_8bpp_modified_current : source_8bpp_current;
+        
+        white_pixel = nb_draws> 1 && mode == FourShadesGrayscale ? 255 : 1;//draw_white_first && mode == FourShadesGrayscale ? 255 : 1;
+
+        if (mode == FourShadesGrayscale || nb_draws> 1 ) 
         {
-            if (mode == 10)
-                eight_bpp_ptr = source_8bpp_modified_current;
-            else
-                eight_bpp_ptr = source_8bpp_current;
-
-            if (draw_white_first && mode == 10)
-                white_pixel = 255;
-            else
-                white_pixel = 1;
             source_image_bit_depth = 8;
+            refresh_every_x_frames_ = refresh_every_x_frames * nb_draws;
         }
         else
         {
+            refresh_every_x_frames_ = refresh_every_x_frames;
             source_image_bit_depth = 1;
-            nb_draws = 1;
+          //  nb_draws = 1;
         }
         // for (int a = 0; a < nb_rmt_times; a++)
         //     printf("%d ", draw_rmt_times[a]);
         // printf("%d \n", loop_counter[0]);
 
         long t0 = getTick();
-        ret2 = pipe_read(fd0, line_changed, height_resolution, ret2);
-        if (ret2 != height_resolution){
-            printf("c++ id %d warning ret2 line_changed \n", id);
-            return -1;
-        }
+        // ret2 = pipe_read(fd0, line_changed, height_resolution, ret2);
+        // if (ret2 != height_resolution){
+        //     printf("c++ id %d warning ret2 line_changed \n", id);
+        //     return -1;
+        // }
 
         if (source_image_bit_depth == 1)
         {
@@ -559,7 +564,6 @@ static int mirroring_task()
 
             optimize_rle(eink_framebuffer[0]);
 
-            int tot = get_n_lines_changed_1bpp(eink_framebuffer[0], line_changed, rotation);
         }
         else if (source_image_bit_depth == 8)
         {
@@ -567,19 +571,17 @@ static int mirroring_task()
             switch (nb_draws)
             {
             case 1:
-                generate_eink_framebuffer_v2(source_8bpp_current, source_8bpp_previous, source_8bpp_modified_previous, eink_framebuffer, mode);
+                generate_eink_framebuffer_v2(source_8bpp_current, source_8bpp_previous, source_8bpp_modified_previous, eink_framebuffer, mode, draws_conf_array);
             default:
                 //  int t0 = getTick();
-                if (mode == 10)
+                if (mode == FourShadesGrayscale)
                     quantize(source_8bpp_current, source_8bpp_modified_current, total_nb_pixels);
-
                 //array_to_file(source_8bpp_previous, total_nb_pixels, working_dir, "source_8bpp_previous", 0);
                 // system("python3 /home/amadeok/epdiy-working/examples/pc_monitor/pc_host_app/img_test.py source_8bpp_previous0");
                 // array_to_file(eight_bpp_ptr, total_nb_pixels, working_dir, "eight_bpp_ptr", 0);
                 // system("python3 /home/amadeok/epdiy-working/examples/pc_monitor/pc_host_app/img_test.py eight_bpp_ptr0");
-
                 // printf("%d \n", getTick() - t0);
-                generate_eink_framebuffer_v2(eight_bpp_ptr, source_8bpp_previous, source_8bpp_modified_previous, eink_framebuffer, mode);
+                generate_eink_framebuffer_v2(eight_bpp_ptr, source_8bpp_previous, source_8bpp_modified_previous, eink_framebuffer, mode, draws_conf_array);
 
                 //  array_to_file(source_8bpp_modified_current, total_nb_pixels, working_dir, "source_8bpp_modified_current", 0);
             }
@@ -587,15 +589,21 @@ static int mirroring_task()
 
         for (int g = 0; g < nb_draws; g++)
         {
+
+            //    std::string js2 = std::string(cJSON_Print(root_));
+            //     printf("%s\n", js2.c_str());
             if (g != 0)
             {
-                if (total[0] != 0 && wifi_on == 1) // if screen didn't change don't wait for ack from board
+                cJSON_ReplaceItemInObject(root_, "current_draw_conf", cJSON_Duplicate(draws_conf_array[g].json_element, 1));
+                if (tot_lines_changed[0] != 0 && wifi_on == 1) // if screen didn't change don't wait for ack from board
                     recv(socket_desc, ready0, 6, 0);
             }
+            else
+                cJSON_AddItemToObject(root_, "current_draw_conf", cJSON_Duplicate(draws_conf_array[g].json_element, 1));
 
             swap_bytes(eink_framebuffer[g], eink_framebuffer_swapped, eink_framebuffer_size, source_image_bit_depth);
 
-            //array_to_file(eink_framebuffer_swapped, eink_framebuffer_size, working_dir, "eink_fb_sw", 0);
+            // array_to_file(eink_framebuffer_swapped, eink_framebuffer_size, working_dir, "eink_fb_sw", 0);
 
             rle_compress(eink_framebuffer_swapped, tmp_array, nb_chunks, compressed_eink_framebuffer, eink_framebuffer_size, chunk_size);
 
@@ -611,33 +619,26 @@ static int mirroring_task()
 
             // print_chunk_sizes();
 
-            total[0] = 0;
-            uint16_t total2[1];
+            tot_lines_changed[0] = get_n_lines_changed_1bpp(eink_framebuffer[g], line_changed, rotation);
 
             if (refresh_every_x_frames_ && loop_counter[0] == refresh_every_x_frames_ || loop_counter[0] == refresh_every_x_frames_ + 1)
             {
                 memset(line_changed, 1, height_resolution);
-                total[0] = height_resolution;
+                tot_lines_changed[0] = height_resolution;
             }
             //  if (loop_counter[0] != refresh_every_x_frames_)
-            else
-            {
-                for (int h = 0; h < height_resolution; h++)
-                    total[0] += line_changed[h];
-                    printf("total line changed %d\n", total[0]);
-                // memcpy(line_changed + height_resolution, total, 2);
-                // memcpy(total2, line_changed + height_resolution, 2);
-            }
 
-            cJSON_ReplaceItemInObject(per_frame_settings_json_root, "total_lines_changed", cJSON_CreateNumber(total[0]));
+            printf("total line changed %d\n", tot_lines_changed[0]);
+
+            cJSON_ReplaceItemInObject(per_frame_settings_json_root, "total_lines_changed", cJSON_CreateNumber(tot_lines_changed[0]));
             cJSON_ReplaceItemInObject(per_frame_settings_json_root, "draw_count", cJSON_CreateNumber(g));
 
-            if (total[0] != 0 && wifi_on == 1 && FT245MODE == 0) // send framebuffer only if current capture is different than previous
+            if (tot_lines_changed[0] != 0 && wifi_on == 1 && FT245MODE == 0) // send framebuffer only if current capture is different than previous
             {
                 wifi_transfer(eink_framebuffer_swapped, eink_framebuffer_size, per_frame_settings_json_root);
                 repeat_counter = 0;
                 // printf("loop_counter %d\n", loop_counter[0]);
-                if (total[0] > 85) // don't increase the counter to clear te display if only 85 lines have changed
+                if (tot_lines_changed[0] > 85) // don't increase the counter to clear te display if only 85 lines have changed
                     loop_counter[0]++;
             }
 
@@ -650,8 +651,8 @@ static int mirroring_task()
 
                 for (int n = 0; n < chunk_size; n++)
                 {
-                    char c_ = eink_framebuffer[0][n];
-                    unsigned char c = eink_framebuffer[0][n];
+                    char c_ = eink_framebuffer[g][n];
+                    unsigned char c = eink_framebuffer[g][n];
                     unpackByte(c, pixels);
                     for (int i = 0; i < 4; i++)
                     {
@@ -727,67 +728,73 @@ int main(int argc, char *argv[])
 {
     int nb_args = argc;
     char *esp32_ip_address = NULL;
-    int framebuffer_cycles;
-    char *rmt_high_time_s;
+    // int framebuffer_cycles;
+    // char *rmt_high_time_s;
     int enable_skipping;
     int epd_skip_threshold;
     int esp32_multithread;
-    int framebuffer_cycles_2;
-    int framebuffer_cycles_2_threshold;
+    // int framebuffer_cycles_2;
+    // int framebuffer_cycles_2_threshold;
 
     std::string jsonStr;
     cJSON *root = NULL;
-    char* argsfile = argv[1];
+
+    const char *argsfile = nb_args > 1 ? argv[1] : "args.json";
     printf("argsfile: %s\n", argsfile);
-    if (nb_args == 2)
+    if (nb_args < 2)
+        printf("json settings file not specified\n");
+
+    std::ifstream file(argsfile);
+
+    if (!file.is_open())
     {
-        std::ifstream file(argsfile);
+        std::cerr << "Error opening file!" << std::endl;
+        return 1;
+    }
+    jsonStr = std::string((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+    file.close();
+    root = cJSON_Parse(jsonStr.c_str());
 
-        if (!file.is_open())
-        {
-            std::cerr << "Error opening file!" << std::endl;
-            return 1;
-        }
-        jsonStr = std::string((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
-        file.close();
-        root = cJSON_Parse(jsonStr.c_str());
+    if (root == nullptr)
+    {
+        const char *error_ptr = cJSON_GetErrorPtr();
+        if (error_ptr != nullptr)
+            std::cerr << "Error before: " << error_ptr << std::endl;
 
-        if (root == nullptr)
-        {
-            const char *error_ptr = cJSON_GetErrorPtr();
-            if (error_ptr != nullptr)
-            {
-                std::cerr << "Error before: " << error_ptr << std::endl;
-            }
-            cJSON_Delete(root);
-            return 1;
-        }
-        esp32_ip_address = cJSON_GetObjectItemCaseSensitive(root, "esp32_ip_address")->valuestring;
-        id = cJSON_GetObjectItemCaseSensitive(root, "id")->valueint;
-        width_resolution = cJSON_GetObjectItemCaseSensitive(root, "width_resolution")->valueint;
-        height_resolution = cJSON_GetObjectItemCaseSensitive(root, "height_resolution")->valueint;
-        refresh_every_x_frames = cJSON_GetObjectItemCaseSensitive(root, "refresh_every_x_frames")->valueint;
-        framebuffer_cycles = cJSON_GetObjectItemCaseSensitive(root, "framebuffer_cycles")->valueint;
-        rmt_high_time_s = cJSON_GetObjectItemCaseSensitive(root, "rmt_high_time")->valuestring;
-        enable_skipping = cJSON_GetObjectItemCaseSensitive(root, "enable_skipping")->valueint;
-        epd_skip_threshold = cJSON_GetObjectItemCaseSensitive(root, "epd_skip_threshold")->valueint;
-        esp32_multithread = cJSON_GetObjectItemCaseSensitive(root, "esp32_multithread")->valueint;
-        framebuffer_cycles_2 = cJSON_GetObjectItemCaseSensitive(root, "framebuffer_cycles_2")->valueint;
-        framebuffer_cycles_2_threshold = cJSON_GetObjectItemCaseSensitive(root, "framebuffer_cycles_2_threshold")->valueint;
-        mode = cJSON_GetObjectItemCaseSensitive(root, "mode")->valueint;
-        selective_compression = cJSON_GetObjectItemCaseSensitive(root, "selective_compression")->valueint;
-        nb_chunks = cJSON_GetObjectItemCaseSensitive(root, "nb_chunks")->valueint;
-        nb_draws = cJSON_GetObjectItemCaseSensitive(root, "nb_draws")->valueint;
-        draw_white_first = cJSON_GetObjectItemCaseSensitive(root, "draw_white_first")->valueint;
-        with_cv2 = cJSON_GetObjectItemCaseSensitive(root, "with_cv2")->valueint;
-        do_full_refresh = cJSON_GetObjectItemCaseSensitive(root, "do_full_refresh")->valueint;
-        disable_logging = cJSON_GetObjectItemCaseSensitive(root, "disable_logging")->valueint;
-        wifi_on = cJSON_GetObjectItemCaseSensitive(root, "wifi_on")->valueint;
+        cJSON_Delete(root);
+        return 1;
+    }
 
-    }else printf("json settings file not specified\n");
+    esp32_ip_address = cJSON_GetObjectItem(root, "esp32_ip_address")->valuestring;
+    id = cJSON_GetObjectItem(root, "id")->valueint;
+    width_resolution = cJSON_GetObjectItem(root, "width_resolution")->valueint;
+    height_resolution = cJSON_GetObjectItem(root, "height_resolution")->valueint;
+    refresh_every_x_frames = cJSON_GetObjectItem(root, "refresh_every_x_frames")->valueint;
+    // framebuffer_cycles = cJSON_GetObjectItem(root, "framebuffer_cycles")->valueint;
+    // rmt_high_time_s = cJSON_GetObjectItem(root, "rmt_high_time")->valuestring;
+    enable_skipping = cJSON_GetObjectItem(root, "enable_skipping")->valueint;
+    epd_skip_threshold = cJSON_GetObjectItem(root, "epd_skip_threshold")->valueint;
+    esp32_multithread = cJSON_GetObjectItem(root, "esp32_multithread")->valueint;
+    // framebuffer_cycles_2 = cJSON_GetObjectItem(root, "framebuffer_cycles_2")->valueint;
+    // framebuffer_cycles_2_threshold = cJSON_GetObjectItem(root, "framebuffer_cycles_2_threshold")->valueint;
+    mode = cJSON_GetObjectItem(root, "mode")->valueint;
+    selective_compression = cJSON_GetObjectItem(root, "selective_compression")->valueint;
+    nb_chunks = cJSON_GetObjectItem(root, "nb_chunks")->valueint;
+    start_nb_draws = cJSON_GetObjectItem(root, "nb_draws")->valueint;
+    // draw_white_first = cJSON_GetObjectItem(root, "draw_white_first")->valueint;
+    with_cv2 = cJSON_GetObjectItem(root, "with_cv2")->valueint;
+    do_full_refresh = cJSON_GetObjectItem(root, "do_full_refresh")->valueint;
+    disable_logging = cJSON_GetObjectItem(root, "disable_logging")->valueint;
+    wifi_on = cJSON_GetObjectItem(root, "wifi_on")->valueint;
+
+    jsonStr = std::string(cJSON_PrintUnformatted(root));
+    std::cout << "JSON Object:\n"
+              << jsonStr << std::endl;
+
     int16_t settings_size[1];
     settings_size[0] = jsonStr.size(); //(nb_args - 7 - 1) * 2;
-  //  int16_t *esp32_settings = (int16_t *)calloc(settings_size[0], sizeof(uint8_t));
+
+    //  int16_t *esp32_settings = (int16_t *)calloc(settings_size[0], sizeof(uint8_t));
 
     //  printf("settings size %d \n", settings_size[0]);
     //   for (int i = 1; i < argc; i++)
@@ -796,11 +803,8 @@ int main(int argc, char *argv[])
     //       cJSON *root = cJSON_Parse(argv[i]);
     //       cJSON *name = cJSON_GetObjectItem(root, "esp32_ip_address");
     //     //printf("Name: %s\n", name->valuestring);
-
     //       iterateJson(root);
     //       cJSON_Delete(root);
-
-
     // esp32_settings[6] = std::stoi(argv[12]);  // framebuffer_cycles_2_threshold
     // esp32_settings[7] = std::stoi(argv[17]);  // mode
     // esp32_settings[8] = std::stoi(argv[14]);  // selective_compression
@@ -808,9 +812,7 @@ int main(int argc, char *argv[])
     // esp32_settings[10] = std::stoi(argv[16]); // nb_draws
     // draw_white_first = esp32_settings[7];
     // mode = std::stoi(argv[18]);
-
     // with_cv2 = std::stoi(argv[19]);
-
     // do_full_refresh = std::stoi(argv[20]);
     // disable_logging = std::stoi(argv[nb_args - 2]);
     // wifi_on = std::stoi(argv[nb_args - 1]);
@@ -820,19 +822,19 @@ int main(int argc, char *argv[])
     printf("refresh_every_x_frames: %d\n", refresh_every_x_frames);
     printf("do_full_refresh: %d\n", do_full_refresh);
 
-    printf("framebuffer_cycles: %d\n", framebuffer_cycles);
+    // printf("framebuffer_cycles: %d\n", framebuffer_cycles);
     // printf("rmt_high_time: %d\n", esp32_settings[1]);
     printf("enable_skipping: %d\n", enable_skipping);
     printf("epd_skip_threshold: %d\n", epd_skip_threshold);
     printf("esp32_multithread: %d\n", esp32_multithread);
 
-    printf("framebuffer_cycles_2: %d\n", framebuffer_cycles_2);
-    printf("framebuffer_cycles_2_threshold: %d\n", framebuffer_cycles_2_threshold);
+    // printf("framebuffer_cycles_2: %d\n", framebuffer_cycles_2);
+    // printf("framebuffer_cycles_2_threshold: %d\n", framebuffer_cycles_2_threshold);
     //  printf("pseudo_greyscale_mode: %d\n", esp32_settings[7]);
     printf("selective_compression: %d\n", selective_compression);
     printf("nb_chunks: %d\n", nb_chunks);
-    printf("nb_draws: %d\n", nb_draws);
-    printf("draw_white_first: %d\n",draw_white_first);
+    printf("start_nb_draws: %d\n", start_nb_draws);
+    //printf("draw_white_first: %d\n",draw_white_first);
     printf("mode: %d\n", mode);
     printf("with_cv2: %d\n", with_cv2);
     printf("wifi_on: %d\n", wifi_on);
@@ -852,22 +854,18 @@ int main(int argc, char *argv[])
     }
 #endif
 
-    if (nb_draws > framebuffer_cycles)
-        nb_rmt_times = nb_draws;
-    else
-        nb_rmt_times = framebuffer_cycles;
-    nb_rmt_times = nb_rmt_times < 2 ? 2: nb_rmt_times; // we need at least 2 rmt times, one for framebuffer_cycles_1 and framebuffer_cycles_2
-
+    // if (nb_draws > framebuffer_cycles)
+    //     nb_rmt_times = nb_draws;
+    // else
+    //     nb_rmt_times = framebuffer_cycles;
+    // nb_rmt_times = nb_rmt_times < 2 ? 2: nb_rmt_times; // we need at least 2 rmt times, one for framebuffer_cycles_1 and framebuffer_cycles_2
     //_size = 6 + nb_rmt_times * 2;
     // esp32_settings[11] = per_frame_wifi_settings_size;
     //cJSON_AddNumberToObject(root, "per_frame_wifi_settings_size", per_frame_wifi_settings_size);
-    jsonStr = std::string(cJSON_Print(root));
-    std::cout << "JSON Object:\n" << jsonStr << std::endl;
-    // draw_rmt_times = (uint16_t *)calloc(nb_rmt_times, sizeof(uint16_t));
 
+    // draw_rmt_times = (uint16_t *)calloc(nb_rmt_times, sizeof(uint16_t));
     // rmt_high_time_s = strtok(rmt_high_time_s, ":");
     // int n = 0;
-
     // while (rmt_high_time_s != NULL)
     // {
     //     draw_rmt_times[n] = std::stoi(rmt_high_time_s);

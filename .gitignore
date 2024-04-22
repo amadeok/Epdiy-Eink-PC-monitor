@@ -2,3 +2,4 @@
 pc_monitor/build/
 pc_monitor/main/build/
 pc_monitor/pc_host_app/__pycache__/
+pc_monitor/pc_host_app/process_capture.exe

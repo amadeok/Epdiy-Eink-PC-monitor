@@ -1,6 +1,9 @@
+#pragma once
 #include <stdlib.h>
 #include <inttypes.h>
-uint32_t getTick();
+#include "cJSON.h"
+#include <map>
+#include <string>
 
 #if !defined(_WIN32)
 #define HANDLE int
@@ -17,6 +20,27 @@ uint32_t getTick();
 #define cwd _getcwd
 #define cd _chdir
 #endif
+
+enum drawTypeEnum {black_and_white, black, white};
+
+static const std::map<std::string, drawTypeEnum> draw_type_map = {
+    {"black_and_white", drawTypeEnum::black_and_white},
+    {"black", drawTypeEnum::black},
+    {"white", drawTypeEnum::white}
+};
+
+struct draw_conf {
+    char* type;
+    uint8_t typeID;
+    int16_t  rmt_high_times[100];
+    int16_t rmt_high_times_n;
+    cJSON * json_element;
+};
+
+uint32_t getTick();
+
+
+enum modeEnum {monochrome, Bayer16, Bayer8, Bayer4, Bayer3, Bayer2, FS, SierraLite, Sierra, PILdithering, FourShadesGrayscale };
 
 //Write an array to a file
 void array_to_file(void *array, int nb_bytes_to_write, const char *path, const char *filename, int k);

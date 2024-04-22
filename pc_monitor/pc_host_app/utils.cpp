@@ -21,6 +21,7 @@ extern int chunk_size;
 
 //struct timeb start, end;
 
+
 uint32_t getTick()
 {
 	#ifdef __linux__
