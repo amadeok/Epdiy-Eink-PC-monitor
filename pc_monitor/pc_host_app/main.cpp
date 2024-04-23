@@ -76,8 +76,8 @@ char *tmp_array;
 
 char *compressed_eink_framebuffer_ptrs[16]; //array of pointers pointing to chunks of framebuffer
 int id, refresh_every_x_frames = 0, refresh_every_x_frames_, selective_compression;
-
-int total_nb_pixels, eink_framebuffer_size, chunk_size, nb_chunks, nb_rmt_times;
+const int nb_chunks = 1; //to do: remove 
+int total_nb_pixels, eink_framebuffer_size, chunk_size,  nb_rmt_times;
 int source_image_bit_depth = 1, mode = -1, esp32_multithread;
 int with_cv2 = 0;
 bool disable_logging;
@@ -802,7 +802,7 @@ int main(int argc, char *argv[])
     // framebuffer_cycles_2_threshold = cJSON_GetObjectItem(root, "framebuffer_cycles_2_threshold")->valueint;
     mode = cJSON_GetObjectItem(root, "mode")->valueint;
     selective_compression = cJSON_GetObjectItem(root, "selective_compression")->valueint;
-    nb_chunks = cJSON_GetObjectItem(root, "nb_chunks")->valueint;
+   // nb_chunks = cJSON_GetObjectItem(root, "nb_chunks")->valueint;
     start_nb_draws = cJSON_GetObjectItem(root, "nb_draws")->valueint;
     // draw_white_first = cJSON_GetObjectItem(root, "draw_white_first")->valueint;
     with_cv2 = cJSON_GetObjectItem(root, "with_cv2")->valueint;
@@ -856,7 +856,7 @@ int main(int argc, char *argv[])
     // printf("framebuffer_cycles_2_threshold: %d\n", framebuffer_cycles_2_threshold);
     //  printf("pseudo_greyscale_mode: %d\n", esp32_settings[7]);
     printf("selective_compression: %d\n", selective_compression);
-    printf("nb_chunks: %d\n", nb_chunks);
+   // printf("nb_chunks: %d\n", nb_chunks);
     printf("start_nb_draws: %d\n", start_nb_draws);
     //printf("draw_white_first: %d\n",draw_white_first);
     printf("mode: %d\n", mode);

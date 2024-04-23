@@ -29,14 +29,14 @@
             "console": "integratedTerminal",
             "args": [
                 // "--ports", "COM16", "COM17",  
-                //    "--labels", "top_left", "bottom_left",  "top_right", "bottom_right", 
+                "--labels", "top_left", "bottom_left",  "top_right", "bottom_right", 
                 //    "--labels", "top_left", "top_right", 
                 "--added_args",
                 "common",
                 //"dw",
                 //  "dp",
-                "--labels",
-                "top_left",
+           //     "--labels",
+          //      "top_left",
                 //python starter.py --labels top_left bottom_left top_right bottom_right  --added_args common
             ],
             "cwd": "${workspaceFolder}/pc_monitor/pc_host_app/"
@@ -50,7 +50,7 @@
             "args": [
                 "display0.conf",
                 // "display1.conf",
-               //   "dw", 
+             //     "dw", 
                 //    "dp",
                 // "override_ip:192.168.1.28"
             ],

@@ -44,7 +44,7 @@ def move_window(window_handle, x, y):
 
 def main():
     serial_ports = ["COM19", "COM18", "COM16", "COM17"]  # Adjust this according to your system
-    serial_ports = serial_ports[0:1]
+    serial_ports = serial_ports#[0:1]
     chip_type = "esp32"  # Adjust this according to your ESP chip
     baud_rate = 691200# 460800  # Adjust this according to your preference
 

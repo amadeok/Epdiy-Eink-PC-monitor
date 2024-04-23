@@ -184,15 +184,16 @@ class display_settings(object):
             return s1 + s2[1:-1] + [start]
         
         s1 = generate_sequence(200, 200, 3)
-        s2 = generate_sequence(50, 350, 5)
+        s2 = generate_sequence(100, 20, 7)
 
 
         self.draws_conf = {
             "draw_list": [
                  
 
-                {"type": "black_and_white", "rmt_high_times": [100 for x in range(5)]} ,
-                #   {"type": "white", "rmt_high_times": [10 for x in range(1)]},
+                {"type": "black_and_white", "rmt_high_times": [120 for x in range(6)]} ,
+                #  {"type": "black_and_white", "rmt_high_times": [30 for x in range(2)]} ,
+                #    {"type": "white", "rmt_high_times": [100 for x in range(3)]},
             ]
         }
         
@@ -226,7 +227,7 @@ class display_settings(object):
                 
         self.nb_draws = len(self.draws_conf["draw_list"])
         if self.mode == "4grayscale" or self.nb_draws > 1 or 1: # or draw_white_first
-            self.nb_chunks ==  1  #5 breaks things
+           # self.nb_chunks ==  1  #5 breaks things
             self.pipe_bit_depth = 8
             self.eight_bpp = np.full((self.width, self.height), 255, dtype=np.uint8)
             self.byte_string_list = [self.eight_bpp, self.eight_bpp]
@@ -236,7 +237,7 @@ class display_settings(object):
             # else:
             #     self.grayscale_shades = 2 #black and white
         else: 
-            self.nb_chunks = 1 #5 breaks things
+           # self.nb_chunks = 1 #5 breaks things
             self.pipe_bit_depth = 1
             self.eight_bpp = None
            # self.grayscale_shades = 2
@@ -252,8 +253,8 @@ class display_settings(object):
         #     self.nb_rmt_times = self.nb_draws
         # else: self.nb_rmt_times = self.framebuffer_cycles
         self.setup_settings_bytearray()
-        if self.esp32_multithread:
-            self.nb_chunks = 1
+        # if self.esp32_multithread:
+        #     self.nb_chunks = 1
         self.mouse_moved = 0
         self.settings_changed = 0
         #self.check_resize()

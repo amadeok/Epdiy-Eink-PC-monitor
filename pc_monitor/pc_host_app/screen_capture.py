@@ -52,7 +52,7 @@ def get_json_file(x, file_name=None):
                 #"framebuffer_cycles_2_threshold": display_list[x].framebuffer_cycles_2_threshold,
                 "mode": modes[display_list[x].mode],
                 "selective_compression": display_list[x].selective_compression,
-                "nb_chunks": display_list[x].nb_chunks,
+                # "nb_chunks": display_list[x].nb_chunks,
                 "nb_draws": display_list[x].nb_draws,
                 #"draw_white_first": display_list[x].draw_white_first,
                 "with_cv2": display_list[x].with_cv2,
@@ -60,7 +60,8 @@ def get_json_file(x, file_name=None):
                 "disable_logging": display_list[x].a.disable_logging,
                 "wifi_on": ctx.wifi_on,
                 "refresh_on_startup": display_list[x].refresh_on_startup, 
-                "pipe_bit_depth": display_list[x].pipe_bit_depth,           
+                "pipe_bit_depth": display_list[x].pipe_bit_depth,    
+                "draw_black_on_startup": display_list[x].draw_black_on_startup       
             }
     temp_file_path = ""
     
@@ -157,6 +158,7 @@ def main_task(ctx):
             #print_settings()
             if ctx.with_cv2 == withCv2Enum.PYTHON.value or  ctx.with_cv2 == withCv2Enum.BOTH.value:
                 cv2.waitKey(1)
+            cv2.waitKey(1)
             if quit_all: break
             continue
         if quit_all: break
@@ -242,11 +244,178 @@ def main_task(ctx):
         if ctx.with_cv2 == withCv2Enum.BOTH.value or ctx.with_cv2 == withCv2Enum.PYTHON.value:
             output_image = image_file.convert("L")
 
-            opencv_image = np.array(output_image)
 
-            opencv_image = cv2.cvtColor(opencv_image, cv2.COLOR_GRAY2BGR)
+            # Read the image
+            # img = opencv_image#cv2.imread('input_image.jpg', cv2.IMREAD_GRAYSCALE)
 
-            cv2.imshow(f"python Image {ctx.id}", opencv_image)
+            # contours, hierarchy = cv2.findContours(img, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+            # drawing = []
+            # for i,c in enumerate(contours):
+            #     # Add contours which don't have any children, value will be -1 for these
+            #     if hierarchy[0,i,1] < 0:
+            #         drawing.append(c)
+            # img = cv2.cvtColor(img,cv2.COLOR_GRAY2BGR)
+            # # Draw filled contours
+            # cv2.drawContours(img, drawing, -1, (255,255,255), thickness=cv2.FILLED)
+            # # Draw contours around filled areas with red just to indicate where these happened
+            # cv2.drawContours(img, drawing, -1, (0,0,255), 1)
+            # cv2.imshow('filled',img)
+            # cv2.imshow('output_image', opencv_image)
+            
+            
+            
+
+
+            cv2.waitKey(1)
+
+            t = time.time()
+
+            opencv_image_ori = cv2.cvtColor(np.array(sct_img), cv2.COLOR_BGRA2GRAY)
+
+            inv_thres = r_shm(ctx.offsets.invert_threshold, 'i')
+
+            n = np.mean(opencv_image_ori)
+
+            opencv_image = None
+            if n <  inv_thres:   
+                opencv_image = 255-opencv_image_ori.copy()
+            else: opencv_image = opencv_image_ori.copy()
+            
+            if r_shm(ctx.offsets.selective_invert,'i'):
+                np_arr = np.ravel(opencv_image)
+                dith.selective_invert_v2_(np_arr, 5, 5, 50, 60, 5)
+                opencv_image = np_arr.reshape(opencv_image.shape)
+
+            kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+            grad = cv2.morphologyEx(opencv_image, cv2.MORPH_GRADIENT, kernel)
+
+            _, bw = cv2.threshold(grad, 0.0, 255.0, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
+
+            kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (9, 1))
+            connected = cv2.morphologyEx(bw, cv2.MORPH_CLOSE, kernel)
+            # using RETR_EXTERNAL instead of RETR_CCOMP
+            contours, hierarchy = cv2.findContours(connected.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+            #For opencv 3+ comment the previous line and uncomment the following line
+            #_, contours, hierarchy = cv2.findContours(connected.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+
+            mask = np.zeros(bw.shape, dtype=np.uint8)
+
+            # for idx in range(len(contours)):
+            #     continue
+            #     x, y, w, h = cv2.boundingRect(contours[idx])
+            #     mask[y:y+h, x:x+w] = 0
+            #     cv2.drawContours(mask, contours, idx, (255, 255, 255), -1)
+            #     r = float(cv2.countNonZero(mask[y:y+h, x:x+w])) / (w * h)
+
+            #     if r > 0.45 and w > 8 and h > 8:
+            #         cv2.rectangle(opencv_image, (x, y), (x+w-1, y+h-1), (255, 255, 255), 2)
+            #opencv_image = (opencv_image[:,:]>=np.mean(opencv_image,axis=(0,1)))*255
+            #opencv_image = cv2.cvtColor(opencv_image, cv2.COLOR_GRAY2BGR)
+            #opencv_image = opencv_image.astype(np.uint8)
+
+            def calculate_distance(cnt1, cnt2):
+                cx1, cy1, w, h = cv2.boundingRect(cnt1)
+                cx2, cy2, w, h = cv2.boundingRect(cnt2)
+                # M1 = cv2.moments(cnt1)
+                # M2 = cv2.moments(cnt2)
+                # cx1 = int(M1['m10'] / M1['m00'])
+                # cy1 = int(M1['m01'] / M1['m00'])
+                # cx2 = int(M2['m10'] / M2['m00'])
+                # cy2 = int(M2['m01'] / M2['m00'])
+                return np.sqrt((cx2 - cx1)**2 + (cy2 - cy1)**2)
+
+
+            # merged_contours = []
+            # contour_threshold_distance = 200  # Adjust this value based on your requirement
+            # for i, cnt1 in enumerate(contours):
+            #     merged = False
+            #     x, y, w, h = cv2.boundingRect(cnt1)
+            #     if w*h < 100: continue
+            #     for j, cnt2 in enumerate(contours):
+            #         if i != j and calculate_distance(cnt1, cnt2) < contour_threshold_distance:
+            #             merged_contours.append(np.vstack((cnt1, cnt2)))
+            #             merged = True
+            #             break
+            #     if not merged:
+            #         merged_contours.append(cnt1)
+
+
+            thres = 100
+            thres_max = 10000
+            mult = 1.2
+            for contour in contours:
+                
+                x, y, w, h = cv2.boundingRect(contour)
+                centerx = x+w//2; centery =  y+h//2
+                w= int(w*mult)
+                h= int(h*mult)
+                a = w*h
+                if a < thres or a > thres_max:continue
+                xx = centerx - w//2
+                yy = centery - h//2
+                enhanced_roi = opencv_image[yy:yy+h, xx:xx+w]
+                alpha = 3# Contrast control (1.0-3.0)
+                beta = 1    # Brightness control (0-100)
+                #enhanced_roi = cv2.convertScaleAbs(enhanced_roi, alpha=alpha, beta=beta)
+                #enhanced_roi = cv2.equalizeHist(enhanced_roi)
+                #if n >  inv_thres:   
+                # enhanced_roi = 255-enhanced_roi
+                enhanced_roi = (enhanced_roi[:,:]>=np.mean(enhanced_roi,axis=(0,1)))*255
+                # min_val = np.min(roi)
+                # max_val = np.max(roi)
+                # enhanced_roi = cv2.convertScaleAbs(roi, alpha=255.0/(max_val-min_val), beta=-min_val*(255.0/(max_val-min_val)))
+                opencv_image[yy:yy+h, xx:xx+w] = enhanced_roi                    
+
+            print("--->", time.time() -t)
+
+            cv2.imshow('opencv_image', opencv_image)
+            cv2.moveWindow('opencv_image', 1200, 0)
+
+            #opencv_image = cv2.cvtColor(opencv_image, cv2.COLOR_GRAY2BGR)
+
+            cv2.imshow(f"opencv_image_ori", opencv_image_ori)
+            cv2.moveWindow('opencv_image_ori', 0, 825)
+            
+            
+            #im_in = np.array(opencv_image)
+
+
+            
+            #im_floodfill_inv = cv2.bitwise_not(im_floodfill)            
+            th = ctx.grey_monochrome_threshold+r_shm(ctx.offsets.grey_to_monochrome_threshold, 'i')
+
+            _, im_in = cv2.threshold(opencv_image, th, 255, cv2.THRESH_BINARY)
+            
+            im_floodfill = im_in.copy()
+            h, w = im_floodfill.shape[:2]
+            mask = np.zeros((h+2, w+2), np.uint8)+ 0
+            cv2.floodFill(im_floodfill, mask, (0,0), 255)
+
+            #thresh, im_in = cv2.threshold(opencv_image, 128, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
+
+            #im_in = 255 - im_in
+            im_out = im_in.copy()
+
+            #im_out = cv2.cvtColor(np.array(sct_img), cv2.COLOR_BGRA2GRAY)
+                        
+            kernel = np.ones((3,3), np.uint8)
+            inverted_image = cv2.bitwise_not(im_in)
+            eroded_image = cv2.erode(inverted_image, kernel, iterations=2)
+            result_image = cv2.bitwise_not(eroded_image)
+
+            mask = eroded_image != 0
+            im_out[mask] = eroded_image[mask]
+            
+            cv2.imshow('im_in', im_in)
+            cv2.moveWindow('im_in', 0, 0)
+
+            cv2.imshow('im_out', im_out)
+            cv2.moveWindow('im_out', 1200, 1000)
+
+            cv2.imshow('array_thresholded', result_image)
+            cv2.moveWindow('array_thresholded', 1200, 1000)
+
+
             cv2.waitKey(1)
             
         if enable_raw_output: 
