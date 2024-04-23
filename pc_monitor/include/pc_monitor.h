@@ -7,7 +7,8 @@
 #include "freertos/task.h"
 #include "xtensa/core-macros.h"
 
-#define DEBUG_MSGs  0
+
+#define DEBUG_MSGs  4
 
 volatile int renderer_chunk_counter, downloader_chunk_counter;
 volatile unsigned long renderer_frame_counter, downloader_frame_counter;
@@ -23,7 +24,7 @@ volatile unsigned long tr0, tr1, td0, td1;
 
 int width_resolution, height_resolution;
 
-int total_nb_pixels, eink_framebuffer_size, chunk_size, nb_chunks, nb_rows_per_chunk;
+int total_nb_pixels, eink_framebuffer_size;
 
 //int framebuffer_cycles; // sets the number of times to write the current framebuffer to the screen
 //int rmt_high_time;      // defined in rmt_pulse.h, a higher value makes blacks blacker and whites whiter
@@ -35,6 +36,7 @@ int selective_compression;
 int extra_bytes;
 //int nb_draws;
 int refresh_on_startup;
+int draw_black_on_startup;
 //int nb_rmt_times;
 //int mode;
 int frame_counter;
@@ -54,17 +56,13 @@ uint8_t *compressed_chunk;
 // uint8_t *where_to_download;
 //uint16_t *draw_rmt_times;
 uint8_t *per_frame_wifi_settings_buffer;
-uint8_t *fc0, *fc1, *fc2, *fc3, *fc4, *fc5, *fc6, *fc7, *fc8, *fc9;
+//uint8_t *fc0, *fc1, *fc2, *fc3, *fc4, *fc5, *fc6, *fc7, *fc8, *fc9;
 uint8_t ready0[6];
 volatile uint8_t clear[2];
 
+#define k 10
+#define MINIMUM_FRAME_TIME  10
 
-#define QUEUE_LENGTH 1
-#define ITEM_SIZE sizeof(int)
-
-volatile QueueHandle_t buffer_queue[2];
-QueueHandle_t queue;
-volatile int switcher;
 
 SemaphoreHandle_t begin;
 
@@ -84,12 +82,28 @@ typedef struct {
     int framebuffer_data_size;
     int line_changed_pos;
     int draw_count;
+    int nb_draws;
     int total_lines_changed;
     int need_to_extract;
     uint8_t *line_changed;
+    uint8_t * frame_buffer;
 } per_frame_settings;
 
-per_frame_settings per_frame_settings_arr [2];
+#define QUEUE_LENGTH 1
+#define ITEM_SIZE sizeof(int)
+#define BUFFERED_FRAMES_N  1
+#define  REQUIRED_BUFFERS_N BUFFERED_FRAMES_N*2
+volatile QueueHandle_t buffer_queue[REQUIRED_BUFFERS_N];
+QueueHandle_t queue;
+volatile int switcher;
+
+static IRAM_ATTR int get_prev_index(int index){
+    int pi = index -1;
+    if (pi < 0)
+        return REQUIRED_BUFFERS_N -1;
+    else return pi;
+}
+per_frame_settings per_frame_settings_arr [REQUIRED_BUFFERS_N];
 
 void print_per_frame_settings(per_frame_settings* settings);
 
