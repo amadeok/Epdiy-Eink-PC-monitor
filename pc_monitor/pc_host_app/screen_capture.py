@@ -59,7 +59,8 @@ def get_json_file(x, file_name=None):
                 "do_full_refresh": display_list[x].do_full_refresh,
                 "disable_logging": display_list[x].a.disable_logging,
                 "wifi_on": ctx.wifi_on,
-                "refresh_on_startup": display_list[x].refresh_on_startup,              
+                "refresh_on_startup": display_list[x].refresh_on_startup, 
+                "pipe_bit_depth": display_list[x].pipe_bit_depth,           
             }
     temp_file_path = ""
     
@@ -176,8 +177,8 @@ def main_task(ctx):
         mode = r_shm(ctx.offsets.mode, 'i')    
         ctx.mode_code = mode
 
-        if mode ==  10 or ctx.nb_draws > 1: ctx.pipe_bit_depth = 8
-        else: ctx.pipe_bit_depth = 1
+        # if mode ==  10 or ctx.nb_draws > 1: ctx.pipe_bit_depth = 8 #to do support switching modes duing runtime
+        # else: ctx.pipe_bit_depth = 1
         if mode == 9: #PIL dithering
             
             image_file = convert_to_greyscale_and_enhance(image_file, ctx)
@@ -234,11 +235,20 @@ def main_task(ctx):
 
         else:
             print("error?")
-        if mode != 10 and not ctx.nb_draws > 1:
+        if mode != 10 and not ctx.nb_draws > 1 and 0:
             image_file = image_file.transpose(Image.FLIP_TOP_BOTTOM) #flip the image so that the first bytes contain the pixel data of the first lines
         if ctx.rotation != 0:
             image_file   = image_file.rotate(ctx.rotation,  expand=True)
+        if ctx.with_cv2 == withCv2Enum.BOTH.value or ctx.with_cv2 == withCv2Enum.PYTHON.value:
+            output_image = image_file.convert("L")
 
+            opencv_image = np.array(output_image)
+
+            opencv_image = cv2.cvtColor(opencv_image, cv2.COLOR_GRAY2BGR)
+
+            cv2.imshow(f"python Image {ctx.id}", opencv_image)
+            cv2.waitKey(1)
+            
         if enable_raw_output: 
             raw_data = get_raw_pixels(
                 image_file, raw_output_file, save_raw_file, ctx.switcher) #remove bitmap pad bytes
@@ -261,7 +271,7 @@ def main_task(ctx):
 
             print(f"Display ID: {ctx.id}, capture took {took}ms")
 
-        time.sleep(ctx.sleep_time/1000)
+        #time.sleep(ctx.sleep_time/1000) #no need for this here because the python already waits for the ack from the board
         
 
 main_task(ctx)

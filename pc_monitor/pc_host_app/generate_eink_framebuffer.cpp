@@ -14,7 +14,7 @@ int debug_grayscale = 1;
 
 int loop_counter0 = 1, loop_counter1 = 0;
 
-void *generate_eink_framebuffer_v1(unsigned char *source_1bpp, char *padded_2bpp_framebuffer_current, char *padded_2bpp_framebuffer_previous, char *eink_framebuffer)
+void generate_eink_framebuffer_v1(unsigned char *source_1bpp, char *padded_2bpp_framebuffer_current, char *padded_2bpp_framebuffer_previous, char *eink_framebuffer)
 { //generate eink framebuffer from 1bpp monochrome capture
     int counter = 0;
 
@@ -53,7 +53,7 @@ void generate_eink_framebuffer_v2(char *source_8bpp_current, char *source_8bpp_p
         int n = 0;
         for (int counter = 0; counter < total_nb_pixels; counter += 4)
         {
-            for (int k = 0; k < nb_draws; k++)
+            for (int k = 0; k < 2; k++) // not nb_draws because we always will draw white and black
                 temp_masks[k] = 0;
             for (int y = 0; y < 4; y++)
             {
@@ -328,7 +328,8 @@ extern int width_resolution;
 int get_n_lines_changed_1bpp(char *eink_framebuffer, char* line_changed, int rotation)
 {
     int tot = 0;
-    int padding = rotation == 180 ? 1 : 15;
+//    int padding = 100;
+        int padding = rotation == 180 ? 1 : 15;
     for (int y = 0; y < height_resolution; y++)
     {
         line_changed[y] = 0;
@@ -370,7 +371,7 @@ int get_n_lines_changed_1bpp(char *eink_framebuffer, char* line_changed, int rot
                 break;
             case 0:break;
             default:
-                tot++;
+             //   tot++;
                 //    printf("| %d - %d ", y, n);
                 for (int yy = y - padding; yy < y + padding; yy++)
                     if (yy >= 0 && yy < height_resolution - 2)
@@ -383,6 +384,9 @@ int get_n_lines_changed_1bpp(char *eink_framebuffer, char* line_changed, int rot
                 break;
         }
     }
+    for (int y = 0; y < height_resolution; y++)
+        tot+= line_changed[y];
+
  //   printf("\n");
  return tot;
 }

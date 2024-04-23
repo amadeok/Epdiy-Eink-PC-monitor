@@ -7,41 +7,28 @@
     "draws_conf": {
         "draw_list": [
             {
-                "type": "white",
+                "type": "black_and_white",
                 "rmt_high_times": [
+                    50,
+                    125,
                     200,
-                    200,
-                    200,
-                    200,
-                    200,
-                    200,
-                    200,
-                    200
-                ]
-            },
-            {
-                "type": "black",
-                "rmt_high_times": [
-                    100,
-                    100,
-                    100,
-                    100,
-                    100,
-                    100
+                    275,
+                    350
                 ]
             }
         ]
     },
     "enable_skipping": 1,
-    "epd_skip_threshold": 8000,
-    "esp32_multithread": 1,
+    "epd_skip_threshold": 100,
+    "esp32_multithread": 0,
     "mode": 0,
     "selective_compression": 0,
     "nb_chunks": 1,
-    "nb_draws": 2,
-    "with_cv2": 2,
+    "nb_draws": 1,
+    "with_cv2": 0,
     "do_full_refresh": 0,
     "disable_logging": 0,
     "wifi_on": 1,
-    "refresh_on_startup": 1
+    "refresh_on_startup": 2,
+    "pipe_bit_depth": 8
 }

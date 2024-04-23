@@ -45,7 +45,7 @@ char compressed_chunk_lengths_in_bytes[64];
 char working_dir[256];
 unsigned char *array_with_zeros, *draw_white_bytes, *draw_black_bytes;
 
-char *line_changed; //array containing 1 or 0 depending on whether the corresponding line on the screen has changed
+char *line_changed[16]; //array containing 1 or 0 depending on whether the corresponding line on the screen has changed
 
 SOCKET socket_desc;
 #if defined(_WIN32)
@@ -105,7 +105,7 @@ DWORD dwBytesWritten;
 
 
 
-void wifi_transfer(char *eink_framebuffer_swapped, int eink_framebuffer_size, cJSON* per_frame_settings_json)
+void wifi_transfer(char *eink_framebuffer_swapped, char* line_changed, int eink_framebuffer_size, cJSON* per_frame_settings_json)
 {
     //cJSON *frameJsonMetadata = cJSON_CreateObject();
 
@@ -334,7 +334,7 @@ static int mirroring_task()
     uint16_t *added_compression_arr[8];
     //per_frame_wifi_settings = (char *)calloc(per_frame_wifi_settings_size, sizeof(char));
 
-    line_changed = (char *)calloc(height_resolution, sizeof(char));
+    //line_changed = (char *)calloc(height_resolution, sizeof(char));
     source_1bpp = (unsigned char *)calloc(total_nb_pixels, sizeof(unsigned char));
     tmp_array = (char *)calloc(eink_framebuffer_size + 50000, sizeof(unsigned char));
    // wifi_transfer_buffer = (char *)calloc(eink_framebuffer_size *2, sizeof(unsigned char));
@@ -368,22 +368,25 @@ static int mirroring_task()
     for (int h = 0; h < preallocated_eink_framebuffer_n; h++)
         eink_framebuffer[h] = (char *)calloc(eink_framebuffer_size, sizeof(char));
 
+    for (int h = 0; h < 16; h++)
+        line_changed[h] = (char *)calloc(height_resolution, sizeof(char));
+
     if (source_image_bit_depth == 1)
     { //assume the first screen capture to be completely white
         memset(padded_2bpp_framebuffer_previous, 85, eink_framebuffer_size * sizeof(unsigned char));
         memset(padded_2bpp_framebuffer_current, 85, eink_framebuffer_size * sizeof(unsigned char));
     }
-    //else if (source_image_bit_depth == 8)
-    //{ //assume the first screen capture to be completely white
+    else if (source_image_bit_depth == 8)
+    { //assume the first screen capture to be completely white
 
-    //  }
+     }
     else
     {
         printf("unsupported bit depth\n");
         return -1;
     }
 
-     white_pixel = start_nb_draws > 1 && mode == FourShadesGrayscale ? 255 : 1;
+     white_pixel =   source_image_bit_depth == 8 > 1 && mode == FourShadesGrayscale ? 255 : 1; //start_nb_draws 
     
     memset(source_8bpp_current, white_pixel, total_nb_pixels * sizeof(unsigned char));
     memset(source_8bpp_modified_current, white_pixel, total_nb_pixels * sizeof(unsigned char));
@@ -429,6 +432,7 @@ static int mirroring_task()
         do_full_refresh = cJSON_GetObjectItem(root_, "do_full_refresh")->valueint;
         std::string notes(cJSON_GetObjectItem(root_, "notes")->valuestring);
         int rotation = cJSON_GetObjectItem(root_, "rotation")->valueint;
+        source_image_bit_depth = cJSON_GetObjectItem(root_, "pipe_bit_depth")->valueint;
 
         cJSON *draws_conf = cJSON_GetObjectItem(root_, "draws_conf");
         cJSON *draw_list = cJSON_GetObjectItem(draws_conf, "draw_list");
@@ -483,17 +487,17 @@ static int mirroring_task()
 
         char *eight_bpp_ptr = mode == FourShadesGrayscale ? source_8bpp_modified_current : source_8bpp_current;
         
-        white_pixel = nb_draws> 1 && mode == FourShadesGrayscale ? 255 : 1;//draw_white_first && mode == FourShadesGrayscale ? 255 : 1;
+        white_pixel = source_image_bit_depth == 8 && mode == FourShadesGrayscale ? 255 : 1;// draw_white_first && mode == FourShadesGrayscale ? 255 : 1;
 
-        if (mode == FourShadesGrayscale || nb_draws> 1 ) 
+        if (mode == FourShadesGrayscale || source_image_bit_depth == 8 )  // || nb_draws > 1
         {
-            source_image_bit_depth = 8;
+          //  source_image_bit_depth = 8;
             refresh_every_x_frames_ = refresh_every_x_frames * nb_draws;
         }
         else
         {
             refresh_every_x_frames_ = refresh_every_x_frames;
-            source_image_bit_depth = 1;
+         //   source_image_bit_depth = 1;
           //  nb_draws = 1;
         }
         // for (int a = 0; a < nb_rmt_times; a++)
@@ -570,8 +574,9 @@ static int mirroring_task()
 
             switch (nb_draws)
             {
-            case 1:
+            case 99: //to do
                 generate_eink_framebuffer_v2(source_8bpp_current, source_8bpp_previous, source_8bpp_modified_previous, eink_framebuffer, mode, draws_conf_array);
+                break;
             default:
                 //  int t0 = getTick();
                 if (mode == FourShadesGrayscale)
@@ -582,11 +587,30 @@ static int mirroring_task()
                 // system("python3 /home/amadeok/epdiy-working/examples/pc_monitor/pc_host_app/img_test.py eight_bpp_ptr0");
                 // printf("%d \n", getTick() - t0);
                 generate_eink_framebuffer_v2(eight_bpp_ptr, source_8bpp_previous, source_8bpp_modified_previous, eink_framebuffer, mode, draws_conf_array);
+                break;
 
                 //  array_to_file(source_8bpp_modified_current, total_nb_pixels, working_dir, "source_8bpp_modified_current", 0);
             }
         }
-
+        tot_lines_changed[0] = 0;
+        for (int g = 0; g < nb_draws; g++)
+            tot_lines_changed[0] += get_n_lines_changed_1bpp(eink_framebuffer[g], line_changed[g], rotation);
+        // char line_changed_combined[height_resolution];
+        // int tot_debug = 0;
+        // for (int i = 0; i < height_resolution; i++){
+        //     line_changed_combined[i] = 0;
+        //     for (int g = 0; g < nb_draws; g++)
+        //     {
+        //         if (line_changed[g][i])
+        //         {
+        //             line_changed_combined[i] = 1;
+        //             break;
+        //         }
+        //     }
+        // } 
+        // for (int y = 0; y < height_resolution; y++)
+        //     tot_debug+= line_changed_combined[y];
+      //  assert(tot_debug == tot_lines_changed[0]);
         for (int g = 0; g < nb_draws; g++)
         {
 
@@ -619,11 +643,10 @@ static int mirroring_task()
 
             // print_chunk_sizes();
 
-            tot_lines_changed[0] = get_n_lines_changed_1bpp(eink_framebuffer[g], line_changed, rotation);
 
             if (refresh_every_x_frames_ && loop_counter[0] == refresh_every_x_frames_ || loop_counter[0] == refresh_every_x_frames_ + 1)
             {
-                memset(line_changed, 1, height_resolution);
+                memset(line_changed[g], 1, height_resolution);
                 tot_lines_changed[0] = height_resolution;
             }
             //  if (loop_counter[0] != refresh_every_x_frames_)
@@ -635,7 +658,7 @@ static int mirroring_task()
 
             if (tot_lines_changed[0] != 0 && wifi_on == 1 && FT245MODE == 0) // send framebuffer only if current capture is different than previous
             {
-                wifi_transfer(eink_framebuffer_swapped, eink_framebuffer_size, per_frame_settings_json_root);
+                wifi_transfer(eink_framebuffer_swapped, line_changed[g], eink_framebuffer_size, per_frame_settings_json_root);
                 repeat_counter = 0;
                 // printf("loop_counter %d\n", loop_counter[0]);
                 if (tot_lines_changed[0] > 85) // don't increase the counter to clear te display if only 85 lines have changed
@@ -786,6 +809,7 @@ int main(int argc, char *argv[])
     do_full_refresh = cJSON_GetObjectItem(root, "do_full_refresh")->valueint;
     disable_logging = cJSON_GetObjectItem(root, "disable_logging")->valueint;
     wifi_on = cJSON_GetObjectItem(root, "wifi_on")->valueint;
+    source_image_bit_depth = cJSON_GetObjectItem(root, "pipe_bit_depth")->valueint;
 
     jsonStr = std::string(cJSON_PrintUnformatted(root));
     std::cout << "JSON Object:\n"
@@ -838,6 +862,7 @@ int main(int argc, char *argv[])
     printf("mode: %d\n", mode);
     printf("with_cv2: %d\n", with_cv2);
     printf("wifi_on: %d\n", wifi_on);
+    printf("source_image_bit_depth: %d\n", source_image_bit_depth);
 
 
 #ifdef WITHOPENCV

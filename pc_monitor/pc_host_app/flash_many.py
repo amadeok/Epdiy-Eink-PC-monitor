@@ -2,25 +2,7 @@ import ctypes
 import subprocess
 import msvcrt, time, threading
 exiting = False
-class STARTUPINFO(ctypes.Structure):
-    _fields_ = [("cb", ctypes.wintypes.DWORD),
-        ("lpReserved", ctypes.c_char_p),
-        ("lpDesktop", ctypes.c_char_p),
-        ("lpTitle", ctypes.c_char_p),
-        ("dwX", ctypes.c_uint),
-        ("dwY", ctypes.c_uint),
-        ("dwXSize", ctypes.c_uint),
-        ("dwYSize", ctypes.c_uint),
-        ("dwXCountChars", ctypes.c_uint),
-        ("dwYCountChars", ctypes.c_uint),
-        ("dwFillAttribute", ctypes.c_uint),
-        ("dwFlags", ctypes.c_uint),
-        ("wShowWindow", ctypes.wintypes.WORD),
-        ("cbReserved2", ctypes.wintypes.WORD),
-        ("lpReserved2", ctypes.c_char_p),
-        ("hStdInput", ctypes.wintypes.HANDLE),
-        ("hStdOutput", ctypes.wintypes.HANDLE),
-        ("hStdError", ctypes.wintypes.HANDLE)]
+
             
 def esc_listener():
     global exiting

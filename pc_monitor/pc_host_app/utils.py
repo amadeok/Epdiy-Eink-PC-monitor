@@ -171,32 +171,31 @@ class display_settings(object):
                 
         try:  getattr(self, "with_cv2")
         except:  self.with_cv2 = 0
+        
+        def generate_sequence(start, end, num_elements):
+            if num_elements == 1:  return [start]
+            step = (end - start) / (num_elements - 1)
+            sequence = [int(start + i * step) for i in range(num_elements)]
+            return sequence
 
-            
-        # def get_val(val):
-        #     n = 0
-        #     for c in val:
-        #         if c == '.': n+=1
-        #         if c == ',': n+=1
-        #     if n> 1:
-        #         return val
-        #     elif n == 1: return float(val)
-        #     elif '-' in val:
-        #         val = val.lstrip("-")
-        #         val = int(val)- int(val)*2
-        #         return val
-        #     elif val.isdigit():
-        #         return int(val)
-        #     else: return val
+        def generate_sequence2(start, end, num_elements):
+            s1 = generate_sequence(start, end, num_elements)
+            s2 = generate_sequence(end, start, num_elements)
+            return s1 + s2[1:-1] + [start]
+        
+        s1 = generate_sequence(200, 200, 3)
+        s2 = generate_sequence(50, 350, 5)
 
-        #     #else: return val
-        # try:
-        #     # Support space-separated name strings
-        #     names = names.split()
-        # except AttributeError:
-        #     pass
-        # for name in names:
-        #     setattr(self, name[0][:-1], get_val(name[1]))
+
+        self.draws_conf = {
+            "draw_list": [
+                 
+
+                {"type": "black_and_white", "rmt_high_times": [100 for x in range(5)]} ,
+                #   {"type": "white", "rmt_high_times": [10 for x in range(1)]},
+            ]
+        }
+        
         self.a = args
         self.width_res2 = self.width + self.x_offset
         self.height_res2 = self.height + self.y_offset
@@ -223,8 +222,10 @@ class display_settings(object):
         self.settings_dither = 0
         self.twenty_four_bpp = np.full((self.width* self.height * 3), 255, dtype=np.uint8)
         self.np_arr = None
+
+                
         self.nb_draws = len(self.draws_conf["draw_list"])
-        if self.mode == "4grayscale" or self.nb_draws > 1: # or draw_white_first
+        if self.mode == "4grayscale" or self.nb_draws > 1 or 1: # or draw_white_first
             self.nb_chunks ==  1  #5 breaks things
             self.pipe_bit_depth = 8
             self.eight_bpp = np.full((self.width, self.height), 255, dtype=np.uint8)
@@ -241,7 +242,9 @@ class display_settings(object):
            # self.grayscale_shades = 2
 
 #        self.nb_draws = (self.grayscale_shades -1 )
-        self.cursor = Image.open('imgs\cursor_thick_alpha_big.png')
+        #self.cursor = Image.open('imgs\cursor_thick_alpha_big.png')
+        self.cursor = Image.open('imgs\cursor.png')
+
         # if self.draw_white_first: 
         #     self.nb_draws = self.nb_draws*2
 
@@ -269,6 +272,7 @@ class display_settings(object):
     def setup_settings_bytearray(self):
         # line_changed_pos = ((self.height*self.width)//4)*2 #size of  wifi_transfer_buffer in c++
         # line_changed_pos -= self.height+2
+
         self.pipe_settings = {"signal": -1,
                               "mouse_moved": 0,
                               "mode": self.mode, 
@@ -283,7 +287,8 @@ class display_settings(object):
                               "draw_count": -1,
                               "total_lines_changed": -1,
                               "need_to_extract": -1,
-                              "rotation": self.rotation
+                              "rotation": self.rotation,
+                              "pipe_bit_depth": self.pipe_bit_depth
                               }# bytearray(b'\x00\x00\x00')
         print()
         # if isinstance(self.rmt_high_time , str):
