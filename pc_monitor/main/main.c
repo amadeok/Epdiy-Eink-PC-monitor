@@ -511,7 +511,7 @@ static void  IRAM_ATTR download_and_extract(const int sock)
 
         // if (frame_info->nb_draws > 1)
         //   pc_monitor_feed_display_with_skip(&per_frame_settings_arr[pi], true);
-          // pc_monitor_feed_display_with_skip(&per_frame_settings_arr[switcher], true);
+          pc_monitor_feed_display_with_skip(&per_frame_settings_arr[switcher], true);
        }
     }
     else
