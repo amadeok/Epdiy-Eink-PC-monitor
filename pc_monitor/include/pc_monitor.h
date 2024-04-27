@@ -6,62 +6,66 @@
 #include "freertos/semphr.h"
 #include "freertos/task.h"
 #include "xtensa/core-macros.h"
+#include "epdiy.h"
+#include "epd_internals.h"
+#include "render_context.h"
+//#include "render_i2s.h"
+#define USING_TEMP_FUNCTIONS 0
+
+#define BOARD epd_board_v4
+#define DISPLAY ED097TC2
+//#define WAVEFORM EPD_BUILTIN_WAVEFORM we are not using waveforms
+
+#define WIFI_SSID "TIM-22836756"
+#define WIFI_PASS "yyHZdybbxsHRErFT69mP3dLK"
+// #define WIFI_SSID "wifi_ssid"
+// #define WIFI_PASS "wifi_password"
 
 
-#define DEBUG_MSGs  4
+#ifndef min_
+#define min_(a, b) ((a) < (b) ? (a) : (b))
+#endif
 
-volatile int renderer_chunk_counter, downloader_chunk_counter;
+// const EpdBoardDefinition *epd_board_;
+// const EpdBoardDefinition *display_;
+
+// const EpdDisplay_t *epd_get_display_();
+// const EpdBoardDefinition *epd_current_board_();
+
+// display = DISPLAY;
+
+#define DEBUG_MSGs 4
+
+RenderContext_t render_context_;
+
 volatile unsigned long renderer_frame_counter, downloader_frame_counter;
-// volatile int current_buffer;
-//volatile int renderer_busy, downloader_busy;
 volatile int stop, clearing;
 volatile unsigned long tr0, tr1, td0, td1;
 
 // volatile uint8_t mouse_moved;
 
-
-//uint16_t *settings;
-
 int width_resolution, height_resolution;
 
 int total_nb_pixels, eink_framebuffer_size;
 
-//int framebuffer_cycles; // sets the number of times to write the current framebuffer to the screen
-//int rmt_high_time;      // defined in rmt_pulse.h, a higher value makes blacks blacker and whites whiter
-//int framebuffer_cycles_2, framebuffer_cycles_2_threshold;
 int enable_skipping, epd_skip_threshold, epd_skip_mouse_only;
-//int draw_white_first;
 int esp32_multithread;
 int selective_compression;
 int extra_bytes;
-//int nb_draws;
+
 int refresh_on_startup;
 int draw_black_on_startup;
-//int nb_rmt_times;
-//int mode;
 int frame_counter;
-//uint8_t need_to_extract;
 
 uint8_t *compressed_chunk;
-//uint8_t *chunk_lenghts;
-//int32_t *chunk_lenghts_int;
-// uint8_t *line_changed;
-//int16_t *total_lines_changed;
 uint8_t *array_with_zeros;
 uint8_t *draw_black_bytes;
 uint8_t *draw_white_bytes;
 uint8_t **framebuffer_chunks;
-//uint8_t *second_framebuffer;
 uint8_t *compressed_chunk;
-// uint8_t *where_to_download;
-//uint16_t *draw_rmt_times;
 uint8_t *per_frame_wifi_settings_buffer;
-//uint8_t *fc0, *fc1, *fc2, *fc3, *fc4, *fc5, *fc6, *fc7, *fc8, *fc9;
 uint8_t ready0[6];
 volatile uint8_t clear[2];
-
-#define k 10
-#define MINIMUM_FRAME_TIME  10
 
 
 SemaphoreHandle_t begin;
@@ -73,8 +77,6 @@ typedef struct {
     int do_full_refresh;
     int16_t rmt_high_times[100];
     int16_t rmt_high_times_n;
-    // int16_t rmt_high_times_aux[100];
-    // int16_t rmt_high_times_aux_n;
     char * type;
     char * notes;
     int wifi_transfer_size;
@@ -105,30 +107,54 @@ static IRAM_ATTR int get_prev_index(int index){
 }
 per_frame_settings per_frame_settings_arr [REQUIRED_BUFFERS_N];
 
-void print_per_frame_settings(per_frame_settings* settings);
 
-/**
- * Write the decompressed buffers to the display 
- */
-// void IRAM_ATTR pc_monitor_feed_display(int total_lines_changed);
-
-void IRAM_ATTR pc_monitor_feed_display_with_skip(per_frame_settings* frame_info);
+void IRAM_ATTR pc_monitor_feed_display_with_skip(per_frame_settings* f_i, bool print_times);
 
 void IRAM_ATTR pc_monitor_feed_display_with_skip_mt();
 
-// uint8_t *get_current_chunk_ptr(int chunk_number);
+void print_per_frame_settings(per_frame_settings *settings);
+float getsecsfloat();
 
-/**
- * Write the decompressed buffers to the display while the next one is being downloaded and extracted. Experimental, for testing only.
-//  */
-// void IRAM_ATTR pc_monitor_feed_display_multithreaded_v1();
+//TEMPORARY:
+// void epd_clear_area_cycles_(EpdRect area, int cycles, int cycle_time);
 
-// void IRAM_ATTR pc_monitor_feed_display_multithreaded_v2();
+// void epd_clear_area_(EpdRect area);
 
-// void IRAM_ATTR signal_245_fifo(const int sock);
+// void epd_clear_();
 
-// void IRAM_ATTR pc_monitor_feed_display_multithreaded_v1_one_chunk();
-// int IRAM_ATTR switch_framebuffer_n(int n);
-// void IRAM_ATTR switch_framebuffer();
-int back_buffer();
-float getsecs();
+// void epd_control_reg_init_();
+
+// void epd_poweron_();
+// void epd_poweroff_();
+// void IRAM_ATTR epd_push_pixels_i2s_(RenderContext_t *ctx, EpdRect area, short time, int color);
+
+// EpdRect epd_full_screen_();
+//TEMPORARY
+
+
+//  #if USING_TEMP_FUNCTIONS == 1
+// // #define  epd_clear_area_cycles__ epd_clear_area_cycles_
+// // #define  epd_clear_area__ epd_clear_area_
+// // #define  epd_clear__ epd_clear_
+// // #define  epd_control_reg_init__ epd_control_reg_init_
+// // #define  epd_poweron__ epd_poweron_
+// // #define  epd_clear_area__ epd_clear_area_
+// // #define  epd_poweroff__ epd_poweroff_
+// // #define  epd_push_pixels_i2s__ epd_push_pixels_i2s_
+// // #define epd_get_display  epd_get_display_
+// // #define  epd_current_board__  epd_current_board_
+
+// #else
+// #define  epd_clear_area_cycles__ epd_clear_area_cycles
+// #define  epd_clear_area__ epd_clear_area
+// #define  epd_clear__ epd_clear
+// #define  epd_control_reg_init__ epd_control_reg_init
+// #define  epd_poweron__ epd_poweron
+// #define  epd_clear_area__ epd_clear_area
+// #define  epd_poweroff__ epd_poweroff
+// #define  epd_push_pixels_i2s__ epd_push_pixels
+// #define epd_get_display epd_get_display
+// #define  epd_current_board__ epd_current_board
+// #endif
+
+

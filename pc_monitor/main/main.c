@@ -25,15 +25,23 @@
 #include "esp_event_loop.h"
 #include "nvs_flash.h"
 #include "pc_monitor.h"
-#include "epd_driver.h"
-//#include "display_ops.h"
+#include "epdiy.h"
 
 #include "driver/uart.h"
 #include "driver/gpio.h"
 #include "esp_err.h"
 #include "cJSON.h"
-#include "ed097oc4.h"
-#include "epd_temperature.h"
+//  #include "app_utils.h"
+// #include "temp.h"
+#include "render.h"
+
+// #if USING_TEMP_FUNCTIONS == 1
+// // #define  epd_full_screen epd_full_screen_
+// // #define  epd_renderer_init_basic__ epd_renderer_init_basic_
+// #else
+// #define  epd_full_screen epd_full_screen
+// #define  epd_renderer_init_basic__ epd_renderer_init_basic
+// #endif
 
 const char* transfer_uuid1 = "8fPMGCramH2aqRY2v5CGqY";
 const char* transfer_uuid2 = "gizUD6hB2kxJEewtbB4MvU";
@@ -41,9 +49,6 @@ const char* transfer_uuid2 = "gizUD6hB2kxJEewtbB4MvU";
 #define TRANSFER_MESSAGE_SIZE (UUID_SIZE*2)+4
 
 char transfer_message[TRANSFER_MESSAGE_SIZE];
-
-#define WIFI_SSID "TIM-22836756"
-#define WIFI_PASS "yyHZdybbxsHRErFT69mP3dLK"
 
 #define FT245MODE 0
 
@@ -54,95 +59,10 @@ int sock = 0;
 static EventGroupHandle_t wifi_event_group;
 const int CONNECTED_BIT = BIT0;
 static const char *TAG = "pc_monitor";
-char* ip_adress = NULL;
-const char * id_label = "bottom_right"; // top_left top_right bottom_left bottom_right
+char* ip_address = NULL;
+const char * id_label = "id_label_not_assigned"; // top_left top_right bottom_left bottom_right
 volatile bool connectedToPc = false;
 
-
-#define UART_PORT       UART_NUM_0
-#define UART_RX_PIN     GPIO_NUM_3
-#define UART_TX_PIN     GPIO_NUM_1
-#define COMMAND         "store_label_id"
-//static const char *TAG_uart = "uart_eeprom_example";
-
-
-//  static uint8_t IRAM_ATTR *get_current_chunk_ptr(int chunk_number)
-// {
-//   switch (chunk_number)
-//   {
-//   case 0:
-//     return fc0;
-//   case 1:
-//     return fc1;
-//   case 2:
-//     return fc2;
-//   case 3:
-//     return fc3;
-//   case 4:
-//     return fc4;
-//   case 5:
-//     return fc5;
-//   case 6:
-//     return fc6;
-//   case 7:
-//     return fc7;
-//   case 8:
-//     return fc8;
-//   case 9:
-//     return fc9;
-//   }
-//   return fc0;
-// }
-
-void eeprom_init() {
-    // esp_err_t err = esp_eeprom_init_default();
-    // if (err != ESP_OK) {
-    //     ESP_LOGE(TAG, "Failed to initialize EEPROM: %s", esp_err_to_name(err));
-  //  }
-}
-
-void eeprom_write_data(uint8_t *data, size_t size) {
-    // esp_err_t err = esp_eeprom_write(0, data, size);
-    // if (err != ESP_OK) {
-    //     ESP_LOGE(TAG, "Failed to write to EEPROM: %s", esp_err_to_name(err));
-    // }
-}
-
-void uart_init() {
-    uart_config_t uart_config = {
-        .baud_rate = 115200,
-        .data_bits = UART_DATA_8_BITS,
-        .parity    = UART_PARITY_DISABLE,
-        .stop_bits = UART_STOP_BITS_1,
-        .flow_ctrl = UART_HW_FLOWCTRL_DISABLE
-    };
-    uart_param_config(UART_PORT, &uart_config);
-    uart_set_pin(UART_PORT, UART_TX_PIN, UART_RX_PIN, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
-    uart_driver_install(UART_PORT, 1024 * 2, 0, 0, NULL, 0);
-}
-
-void uart_read_task(void *pvParameters) {
-    uint8_t data_buffer[256]; // Buffer to hold received data
-    // while (1) {
-    //     int len = uart_read_bytes(UART_PORT, data_buffer, sizeof(data_buffer), portMAX_DELAY);
-    //     printf("data_buffer %s\n", data_buffer);
-    //     if (len > 0) {
-    //         // Check if received command matches the trigger command
-    //         if (strncmp((char *)data_buffer, COMMAND, strlen(COMMAND)) == 0) {
-    //             // Start reading from UART and writing to EEPROM
-    //             while (1) {
-    //                 len = uart_read_bytes(UART_PORT, data_buffer, sizeof(data_buffer), portMAX_DELAY);
-    //                 if (len > 0) {
-    //                     // Write received data to EEPROM
-    //                     eeprom_write_data(data_buffer, len);
-    //                 }
-    //             }
-    //         }
-    //     }
-    //     vTaskDelay(100 / portTICK_PERIOD_MS);
-
-    // }
-}
 
 // Wifi event handler
 static esp_err_t event_handler(void *ctx, system_event_t *event)
@@ -176,81 +96,10 @@ static esp_err_t event_handler(void *ctx, system_event_t *event)
   return ESP_OK;
 }
 
-// void init_memory()
-// {
-//   printf("sizes %d \n", chunk_size + extra_bytes);
-//   if (REQUIRED_BUFFERS_N > 0)
-//     fc0 = (uint8_t *)heap_caps_malloc((chunk_size + extra_bytes) * sizeof(uint8_t), MALLOC_CAP_SPIRAM);
-//   if (REQUIRED_BUFFERS_N > 1 || esp32_multithread >= 1)
-//     fc1 = (uint8_t *)heap_caps_malloc((chunk_size + extra_bytes) * sizeof(uint8_t), MALLOC_CAP_SPIRAM);
-//   if (REQUIRED_BUFFERS_N > 2)
-//     fc2 = (uint8_t *)heap_caps_malloc((chunk_size + extra_bytes) * sizeof(uint8_t), MALLOC_CAP_SPIRAM);
-//   if (REQUIRED_BUFFERS_N > 3)
-//     fc3 = (uint8_t *)heap_caps_malloc((chunk_size + extra_bytes) * sizeof(uint8_t), MALLOC_CAP_SPIRAM);
-//   if (REQUIRED_BUFFERS_N > 4)
-//     fc4 = (uint8_t *)heap_caps_malloc((chunk_size + extra_bytes) * sizeof(uint8_t), MALLOC_CAP_SPIRAM);
-//   if (REQUIRED_BUFFERS_N > 5)
-//     fc5 = (uint8_t *)heap_caps_malloc((chunk_size + extra_bytes) * sizeof(uint8_t), MALLOC_CAP_SPIRAM);
-//   if (REQUIRED_BUFFERS_N > 6)
-//     fc6 = (uint8_t *)heap_caps_malloc((chunk_size + extra_bytes) * sizeof(uint8_t), MALLOC_CAP_SPIRAM);
-//   if (REQUIRED_BUFFERS_N > 7)
-//     fc7 = (uint8_t *)heap_caps_malloc((chunk_size + extra_bytes) * sizeof(uint8_t), MALLOC_CAP_SPIRAM);
-//   if (REQUIRED_BUFFERS_N > 8)
-//     fc8 = (uint8_t *)heap_caps_malloc((chunk_size + extra_bytes) * sizeof(uint8_t), MALLOC_CAP_SPIRAM);
-//   if (REQUIRED_BUFFERS_N > 9)
-//     fc9 = (uint8_t *)heap_caps_malloc((chunk_size + extra_bytes) * sizeof(uint8_t), MALLOC_CAP_SPIRAM);
-// }
 void free_memory()
 {
-  // if (REQUIRED_BUFFERS_N > 0)
-  //   heap_caps_free(fc0);
-  // if (REQUIRED_BUFFERS_N > 1)
-  //   heap_caps_free(fc1);
-  // if (REQUIRED_BUFFERS_N > 2)
-  //   heap_caps_free(fc2);
-  // if (REQUIRED_BUFFERS_N > 3)
-  //   heap_caps_free(fc3);
-  // if (REQUIRED_BUFFERS_N > 4)
-  //   heap_caps_free(fc4);
-  // if (REQUIRED_BUFFERS_N > 5)
-  //   heap_caps_free(fc5);
-  // if (REQUIRED_BUFFERS_N > 6)
-  //   heap_caps_free(fc6);
-  // if (REQUIRED_BUFFERS_N > 7)
-  //   heap_caps_free(fc7);
-  // if (REQUIRED_BUFFERS_N > 8)
-  //   heap_caps_free(fc8);
-  // if (REQUIRED_BUFFERS_N > 9)
-  //   heap_caps_free(fc9);
-
   heap_caps_free(compressed_chunk);
-  // heap_caps_free(chunk_lenghts);
-  // heap_caps_free(chunk_lenghts_int);
- // heap_caps_free(line_changed);
-  //heap_caps_free(total_lines_changed);
-  // heap_caps_free(draw_rmt_times);
-  // heap_caps_free(per_frame_wifi_settings);
-
-  //   for (int i = 0; i < 2; i++){
-  //   per_frame_settings_arr[i].line_changed  = (uint8_t *)malloc(sizeof(uint8_t) * height_resolution); 
-  //   if (per_frame_settings_arr[i].line_changed == NULL)
-  //     printf("Memory allocation line_changed failed!\n");
-  //   else
-  //     printf("Memory allocation line_changed  successful!\n");
-  // }
-
-
 }
-
-// static void  IRAM_ATTR check_conc()
-// {
-//   while (1)
-//   {
-//     if (downloader_busy == 1 && renderer_busy == 1)
-//       printf("### busys %d, %d ###\n ", downloader_busy, renderer_busy);
-//     vTaskDelay(2 / portTICK_PERIOD_MS);
-//   }
-// }
 
 int end_session()
 {
@@ -299,19 +148,19 @@ tcpip_adapter_ip_info_t wifi_task(void *pvParameter)
   // print the local IP address
   tcpip_adapter_ip_info_t ip_info;
   ESP_ERROR_CHECK(tcpip_adapter_get_ip_info(TCPIP_ADAPTER_IF_STA, &ip_info));
-  // memcpy(ip_adress, &ip_info.ip, strlen(&ip_info.ip));
-  if (ip_adress == NULL)
+  // memcpy(ip_address, &ip_info.ip, strlen(&ip_info.ip));
+  if (ip_address == NULL)
   {
-    ip_adress = (char *)heap_caps_malloc(100, MALLOC_CAP_SPIRAM);
+    ip_address = (char *)heap_caps_malloc(100, MALLOC_CAP_SPIRAM);
   }
-  if (ip_adress == NULL)
+  if (ip_address == NULL)
   {
-    printf("ip_adress ptr is null");
+    printf("ip_address ptr is null");
   }
   else
   {
-    memset(ip_adress, 0, 100);
-    sprintf(ip_adress, "%s", ip4addr_ntoa(&ip_info.ip));
+    memset(ip_address, 0, 100);
+    sprintf(ip_address, "%s", ip4addr_ntoa(&ip_info.ip));
   }
 
   printf("IP Address:  %s\n", ip4addr_ntoa(&ip_info.ip));
@@ -470,7 +319,6 @@ void print_values(int tot) // for debugging
 void populate_rmt_array(char* which, int16_t* whichArr, int16_t *array_size, cJSON * root){
     cJSON *numbers_array = cJSON_GetObjectItem(root, which);
     int i = 0;
-   // printf("-------->%d\n", whichArr[0]);
     if (numbers_array != NULL && cJSON_IsArray(numbers_array))
     {
       *array_size = cJSON_GetArraySize(numbers_array);
@@ -478,18 +326,17 @@ void populate_rmt_array(char* which, int16_t* whichArr, int16_t *array_size, cJS
       {
         cJSON *element = cJSON_GetArrayItem(numbers_array, i);
         whichArr[i] = element->valueint;
-        //per_frame_settings_arr[cur_free_buffer].rmt_high_times_main[i]  = element->valueint;
+        //per_frame_settings_arr[cur_free_buffer].rmt_high_times_main[i]  = element;
         // if (cJSON_IsNumber(element))
-        //   printf("%d\n", element->valueint);
+          //  printf("-----> %d\n", element);
       }
     }else
         printf(" numbers_array json is null\n");
 
-
-    // for (int i = 0; i < 100; i++ ){
-    //   if (whichArr[i] == -1)break;
-    //      printf("%s %d %d\n", which, i, whichArr[i]);
-    // }
+    for (int i = 0; i < 100; i++ ){
+      if (whichArr[i] == -1)break;
+         printf("%s %d %d\n", which, i, whichArr[i]);
+    }
 }
 
 per_frame_settings * populate_per_frame_settings_arr(cJSON *root_, int index)
@@ -511,63 +358,14 @@ per_frame_settings * populate_per_frame_settings_arr(cJSON *root_, int index)
   //cJSON *rmt_high_times = cJSON_GetObjectItem(current_draw_conf, "rmt_high_times");
   cJSON *draws_conf = cJSON_GetObjectItem(root_, "draws_conf");
   settings->nb_draws = cJSON_GetObjectItem(draws_conf, "nb_draws")->valueint;
- // printf("------>nb_draws %d\n", settings->nb_draws);
+ // printf("------>nb_draws %d\n", settings->nb_draws)->valueint;
   settings->type = cJSON_GetObjectItem(current_draw_conf, "type")->valuestring;
 
-  // do_full_refresh = cJSON_GetObjectItem(root_, "do_full_refresh")->valueint;
   populate_rmt_array("rmt_high_times", settings->rmt_high_times, &settings->rmt_high_times_n, current_draw_conf);
- // populate_rmt_array("aux", settings->rmt_high_times_aux, &settings->rmt_high_times_aux_n, rmt_high_times);
-  // cJSON *numbers_array = cJSON_GetObjectItem(rmt_high_times, "main");
-  // if (numbers_array != NULL && cJSON_IsArray(numbers_array))
-  // {
-  //   int array_size = cJSON_GetArraySize(numbers_array);
-  //   for (int i = 0; i < array_size; i++)
-  //   {
-  //     cJSON *element = cJSON_GetArrayItem(numbers_array, i);
-  //     per_frame_settings_arr[cur_free_buffer].rmt_high_times_main[i]  = element->valueint;
-  //     // if (cJSON_IsNumber(element))
-  //     //   printf("%d\n", element->valueint);
-  //   }
-  // }
+
   return settings;
 }
 
-//int  IRAM_ATTR set_download_pointer(int chunk_number)
-//{
-  // if (esp32_multithread == 2)
-  //  {
-  // //   //  t0 = xTaskGetTickCount();
-  // //   while (downloader_frame_counter - renderer_frame_counter > 1 || clearing == 1 || renderer_busy == 1)
-  // //   {
-  // //     vTaskDelay(3 / portTICK_PERIOD_MS);
-  // //     //    printf("downloader waiting %d, \n", busy[current_buffer]);
-  // //   }
-  // //   //  t1 = xTaskGetTickCount();
-  // //   //  printf("d waited : %lu | td1 td0: %lu, %lu \n", t1 - t0, t0, t1);
-  // //   buf = back_buffer();
-  //  }
-  // else
-//   if (chunk_lenghts_int[chunk_number] > eink_framebuffer_size / 100 * selective_compression && selective_compression != 0)
-//   {
-//     where_to_download = get_current_chunk_ptr(chunk_number);
-//    // *download_size = eink_framebuffer_size;
-// #if DEBUG_MSGs == 1
-//     printf("receving uncompressed framebuffer %d\n", chunk_lenghts_int[chunk_number]);
-// #endif
-//     need_to_extract = 0;
-//   }
-//   else
-//   {
-//     where_to_download = compressed_chunk;
-//    // *download_size = chunk_lenghts_int[chunk_number];
-// #if DEBUG_MSGs == 1
-//     printf("receving compressed framebuffer %d\n", *download_size);
-// #endif
-//     need_to_extract = 1;
-//   }
-//   return need_to_extract;
-  //  printf("where_to_download %p, download_size %d\n", where_to_download, *download_size);
-//}
 
 int N = 0;
 
@@ -580,7 +378,7 @@ void ch()
   N++;
 }
 void print_free_internal_ram(char* step){
-  // printf("sram step %s\n", step);
+   printf("sram step %s\n", step);
        //   ESP_LOGI("SRAM", "esp_get_free_heap_size: %d bytes", esp_get_free_heap_size());
     ESP_LOGI("SRAM", "esp_get_free_internal_heap_size: %d bytes", esp_get_free_internal_heap_size());
    //   ESP_LOGI("SRAM", "esp_get_minimum_free_heap_size: %d bytes", esp_get_minimum_free_heap_size());
@@ -611,34 +409,32 @@ static void  IRAM_ATTR download_and_extract(const int sock)
     if (esp32_multithread == 1)
     {
 #if DEBUG_MSGs == 3
-      ESP_LOGI("D", " %-30s %-3d %4.3f", "waiting for buffer", switcher, getsecs());
+       ESP_LOGI("D", " %-30s %-3d %4.3f", "waiting for buffer", switcher, getsecsfloat());
 #endif
       xQueueReceive(buffer_queue[switcher], &switcher, portMAX_DELAY);
-      // printf("D %-30s %-3d %4.3f\n", "received", switcher, getsecs());
+      // printf("D %-30s %-3d %4.3f\n", "received", switcher, getsecsfloat());
 #if DEBUG_MSGs == 3
-      ESP_LOGI("D", " %-30s %-3d %4.3f", "start", switcher, getsecs());
+       ESP_LOGI("D", " %-30s %-3d %4.3f", "start", switcher, getsecsfloat());
 #endif
     }
     unsigned long t0 = xTaskGetTickCount();
 
     int len = 0, tot = 0, compressed_size, buf_size = 4096 * 5;
     int delta = 0;
-    downloader_chunk_counter = 0;
-    //  print_free_internal_ram("before send 1");
 
-  //  vTaskDelay(3000);
     recv(sock, transfer_message, TRANSFER_MESSAGE_SIZE, 0);
     for (int i = 0; i < UUID_SIZE; i++)
       if (transfer_message[i] != transfer_uuid1[i]){
         printf("WARNING TRANSFER MESSAGE UUID MISMATCH\n");
       }
-    memcpy(&per_frame_wifi_settings_size, transfer_message+UUID_SIZE, 4);
+    memcpy(&per_frame_wifi_settings_size, transfer_message + UUID_SIZE, 4);
     recv(sock, per_frame_wifi_settings_buffer, per_frame_wifi_settings_size, 0);
+    //  printf("per_frame_wifi_settings_buffer:%d %s\n", per_frame_wifi_settings_size, per_frame_wifi_settings_buffer);
+    // printf("t01 %lu \n", xTaskGetTickCount() - t0);
 
-   // printf("t01 %lu \n", xTaskGetTickCount() - t0);
-  
-    //long t_f_i_0 = xTaskGetTickCount();
-     cJSON *per_frame_settings_json_root = cJSON_Parse((const char *)per_frame_wifi_settings_buffer);
+    // long t_f_i_0 = xTaskGetTickCount();
+    cJSON *per_frame_settings_json_root = cJSON_Parse((const char *)per_frame_wifi_settings_buffer);
+    memset(per_frame_wifi_settings_buffer, 0, min_(256 * 256, per_frame_wifi_settings_size+2));
 
     if (per_frame_settings_json_root == NULL)
     {
@@ -651,54 +447,16 @@ static void  IRAM_ATTR download_and_extract(const int sock)
      per_frame_settings* frame_info = populate_per_frame_settings_arr(per_frame_settings_json_root, switcher);
      //print_per_frame_settings(frame_info);
      cJSON_Delete(per_frame_settings_json_root);
-   // printf("cJSON_Parse + populate_per_frame_settings_arr %lu \n", xTaskGetTickCount() - t_f_i_0);
-    //per_frame_settings* frame_info = &per_frame_settings_arr[switcher];
-   // printf("\n--->\n");
-    //printf("<---\n");
-    //print_free_internal_ram("after frame_info");
+
     uint32_t free_sram = esp_get_free_internal_heap_size();
-    if (free_sram < 10*1000)
+    if (free_sram < 10*1000  || 1)
       ESP_LOGI("SRAM", "--------------> warning low free sram: %d bytes", free_sram);
-    // if (per_frame_wifi_settings[0] == 'm')
-    //   mouse_moved = 1;
-    // else
-    //   mouse_moved = 0;
-    //printf("per_frame_wifi_settings 2 \n");
-//     recv(sock, chunk_lenghts, nb_chunks * 4, 0);
-//     for (int a = 0; a < nb_chunks; a++)
-//     {
-//       memcpy(chunk_lenghts_int + (a * 1), chunk_lenghts + a * 4, 4 * sizeof(uint8_t));
-// #if DEBUG_MSGs == 1
-//       printf(" %d ", chunk_lenghts_int[a]);
-//       if (a == nb_chunks)
-//         printf("\n");
-// #endif
-//     }
- // printf("--------->switcher%d\n", switcher);
+
     len = recv(sock, frame_info->line_changed, height_resolution, 0);
-    // len = send(sock, frame_info->line_changed, height_resolution, 0);
-    // printf("line_changed len %3d | %3d %3d \n", len, frame_info->line_changed[0], frame_info->line_changed[height_resolution-1]);
-  //  memcpy(total_lines_changed, line_changed + height_resolution, 2);
-   // need_to_extract = set_download_pointer(0, &frame_info->framebuffer_data_size);
 
     uint8_t *where_to_download =  frame_info->need_to_extract ? compressed_chunk : frame_info->frame_buffer ; // get_current_chunk_ptr(switcher) ;
 
     unsigned long t1 = xTaskGetTickCount();
-
-    // if (per_frame_wifi_settings[2] != 0)
-    // {
-    //   int delay = per_frame_wifi_settings[2];
-    //   printf("d clearing with delay %d\n", delay);
-    //   if (esp32_multithread == 0 || 1)
-    //   {
-    //     clearing = 1;
-    //     epd_clear();
-    //     vTaskDelay(delay / portTICK_PERIOD_MS);
-    //     clearing = 0;
-    //   }
-    //   else
-    //     clear[current_buffer] = per_frame_wifi_settings[2];
-    // }
 
     if (frame_info->framebuffer_data_size < buf_size)
       buf_size = frame_info->framebuffer_data_size;
@@ -731,70 +489,7 @@ static void  IRAM_ATTR download_and_extract(const int sock)
     if (frame_info->need_to_extract == 1)
       rle_extract1(frame_info->framebuffer_data_size, frame_info->frame_buffer , where_to_download ); //get_current_chunk_ptr(switcher)
 
-    // if (esp32_multithread == 0)
-    // {
-    //   if (frame_info->need_to_extract == 1)
-    //     rle_extract1(frame_info->framebuffer_data_size, get_current_chunk_ptr(0), where_to_download);
-    // }
-    // else
-    // {
-
-    //    if (frame_info->need_to_extract == 1)
-    //      rle_extract1(frame_info->framebuffer_data_size, get_current_chunk_ptr(switcher), where_to_download);
-    //   // ptr_m = get_current_chunk_ptr(back_buffer());
-    //   // printf("ptr_m %p, \n", ptr_m);
-    //   // if (per_frame_wifi_settings[2] != 0)
-    //   //   ptr_m[0] = per_frame_wifi_settings[2];
-    //   // else
-    //   //   ptr_m[0] = 0;
-    // }
-
-    //   delta = xTaskGetTickCount() - time2;
-    //  printf("extracting took : %d ", delta);
-    //downloader_chunk_counter++;
-
-// #if DEBUG_MSGs == 2
-//     printf("d1 cc %d, fc %lu \n", downloader_chunk_counter, downloader_frame_counter);
-// #endif
-//     for (int h = 0; h < nb_chunks - 1; h++)
-//     {
-//       // printf("D renderer %d downloader %d\n", renderer_chunk_counter, downloader_chunk_counter);
-//       tot = 0;
-//       len = 0;
-//       buf_size = 4096 * 5;
-//       need_to_extract = set_download_pointer(h + 1);
-//       if (frame_info->framebuffer_data_size < buf_size)
-//         buf_size = frame_info->framebuffer_data_size;
-//       do
-//       {
-//         len = recv(sock, where_to_download + tot, buf_size, 0);
-// #if DEBUG_MSGs == 1
-//         printf("len %d, tot %d\n", len, tot);
-// #endif
-//         //   print_values(tot);
-//         tot += len;
-//         if (len < 0)
-//           break;
-//         if (frame_info->framebuffer_data_size - tot < 4096 * 6)
-//         {
-//           buf_size = frame_info->framebuffer_data_size - tot;
-//         }
-//       } while (tot < frame_info->framebuffer_data_size);
-// #if DEBUG_MSGs == 1
-//       printf("tot %d \n", tot);
-// #endif
-//       if (len < 0)
-//         if (end_session() == -1)
-//           break;
-//       if (need_to_extract == 1)
-//         rle_extract1(frame_info->framebuffer_data_size, get_current_chunk_ptr(h + 1), where_to_download);
-//       downloader_chunk_counter++;
-// #if DEBUG_MSGs == 2
-//       printf("down cc %d, fc %lu \n", downloader_chunk_counter, downloader_frame_counter);
-// #endif
-//     }
-
-//printf("d2 Download and extract took : %lu\n", xTaskGetTickCount() - time1);
+  
     unsigned long t2 = xTaskGetTickCount();
 
 #if DEBUG_MSGs == 2
@@ -813,16 +508,17 @@ static void  IRAM_ATTR download_and_extract(const int sock)
 
       if (frame_info->draw_count == frame_info->nb_draws - 1)
       {
-//        epd_draw_image(epd_full_screen(),frame_info->frame_buffer, BLACK_ON_WHITE );
-        if (frame_info->nb_draws > 1)
-          pc_monitor_feed_display_with_skip(&per_frame_settings_arr[pi]);
-        pc_monitor_feed_display_with_skip(&per_frame_settings_arr[switcher]);
-      }
+
+        // if (frame_info->nb_draws > 1)
+        //   pc_monitor_feed_display_with_skip(&per_frame_settings_arr[pi], true);
+          // pc_monitor_feed_display_with_skip(&per_frame_settings_arr[switcher], true);
+       }
     }
     else
     {
 #if DEBUG_MSGs == 3
-      ESP_LOGI("D", " %-30s %-3d %4.3f", "end", switcher, getsecs());
+
+      ESP_LOGI("D", " %-30s %-3d %4.3f", "end", switcher, getsecsfloat());
 #endif
       if (frame_info->draw_count == frame_info->nb_draws - 1)
       {
@@ -865,7 +561,7 @@ void receive_settings(const int sock)
   {
      printf("ERROR failed to parse settings json:\n");
   }
- // framebuffer_cycles = cJSON_GetObjectItem(root, "framebuffer_cycles")->valueint;
+ // framebuffer_cycles = cJSON_GetObjectItem(root, "framebuffer_cycles");
   enable_skipping = cJSON_GetObjectItem(root, "enable_skipping")->valueint;
   epd_skip_threshold = cJSON_GetObjectItem(root, "epd_skip_threshold")->valueint;
   esp32_multithread = cJSON_GetObjectItem(root, "esp32_multithread")->valueint;
@@ -903,8 +599,8 @@ void receive_settings(const int sock)
 //  printf("nb_rmt_times %d \n", nb_rmt_times);
   printf("################# \n");
   // already_got_settings = true;
-  width_resolution = EPD_WIDTH;
-  height_resolution = EPD_HEIGHT;
+  width_resolution = DISPLAY.width;
+  height_resolution = DISPLAY.height;
 
   total_nb_pixels = width_resolution * height_resolution;
   eink_framebuffer_size = total_nb_pixels / 4;
@@ -923,6 +619,7 @@ void receive_settings(const int sock)
   // total_lines_changed = (int16_t *)heap_caps_malloc(2, MALLOC_CAP_SPIRAM);
   // draw_rmt_times = (uint16_t *)heap_caps_malloc(nb_rmt_times * sizeof(uint16_t), MALLOC_CAP_SPIRAM);
    per_frame_wifi_settings_buffer = (uint8_t *)heap_caps_malloc(256*256, MALLOC_CAP_SPIRAM);
+    memset(per_frame_wifi_settings_buffer, 0, 256 * 256);
 
    for (int i = 0; i < REQUIRED_BUFFERS_N; i++)
    {
@@ -955,7 +652,7 @@ void receive_settings(const int sock)
   {
     // begin = xSemaphoreCreateBinary();
 
-    xTaskCreatePinnedToCore(&pc_monitor_feed_display_with_skip_mt, "feed_display_task", 1 << 12, NULL, 10, NULL, 0); //0
+    xTaskCreatePinnedToCore(&pc_monitor_feed_display_with_skip_mt, "feed_display_task", 1 << 14, NULL, 10, NULL, 0); //0
     // second_framebuffer = (uint8_t *)heap_caps_malloc(chunk_size + extra_bytes, MALLOC_CAP_SPIRAM);
   }
     cJSON_Delete(root);
@@ -1087,7 +784,11 @@ static void tcp_server_task(void *pvParameter)
 
     for (int i = 0; i < draw_black_on_startup; i++)
     {
+ #if USING_TEMP_FUNCTIONS == 1
+     // epd_push_pixels_i2s_(&render_context_, epd_full_screen_(), 3, 0);
+  #else
       epd_push_pixels(epd_full_screen(), 3, 0);
+  #endif
     }
     vTaskDelay(100 / portTICK_PERIOD_MS);
 
@@ -1110,16 +811,72 @@ CLEAN_UP:
   // wifi_task(NULL);
 }
 
+void set_id_label(char* label, nvs_handle_t flash_handle){
+   esp_err_t err = nvs_set_str(flash_handle, "id_label", label);
+  if (err != ESP_OK) {
+      printf("Error (%s) writing to NVS\n", esp_err_to_name(err));
+  } else {
+      printf("String value written to NVS\n");
+  }
+
+  err = nvs_commit(flash_handle);
+  if (err != ESP_OK) {
+      printf("Error (%s) committing NVS\n", esp_err_to_name(err));
+  }
+}
+
+bool get_id_label(char* buffer, nvs_handle_t flash_handle ){
+  //char value[200]; // Assuming the maximum length of the string is 20 characters
+  size_t required_size;
+  bool id_label_found_in_flash = false;
+  esp_err_t err = nvs_get_str(flash_handle, "id_label", NULL, &required_size);
+  if (err == ESP_OK)
+  {
+    if (required_size > 200)
+    { // sizeof(buffer)
+      sprintf(buffer, "String value too large for buffer"); // printf("String value too large for buffer\n");
+    }
+    else
+    {
+      id_label_found_in_flash = true;
+      err = nvs_get_str(flash_handle, "id_label", buffer, &required_size);
+      if (err != ESP_OK)
+        sprintf(buffer, "Error (%s) reading from NVS", esp_err_to_name(err));
+      // printf("Retrieved value from NVS: %s\n", value);
+      //  else
+      // printf("Error (%s) reading from NVS\n", esp_err_to_name(err));
+    }
+  }
+  else
+    sprintf(buffer, "Error (%s) reading from NVS", esp_err_to_name(err)); // printf("Error (%s) reading from NVS\n", esp_err_to_name(err));
+  return id_label_found_in_flash;
+}
+
 void app_main()
 {
+  ////epd_set_board(&BOARD);
+    ////epd_renderer_init(EPD_LUT_1K);
+    print_free_internal_ram("before epd_init");
+    
+    epd_set_board(&BOARD);
+    epd_set_display(&DISPLAY);
+    // // epd_board_ = &BOARD;
+    // // display_ =& DISPLAY;
+    epd_renderer_init_basic(&BOARD);
+    
+    // epd_control_reg_init();
+
+  //// epd_init(&BOARD, &ED097TC2, EPD_LUT_1K); //uses a lot of sram
+
+  //// vTaskDelay(10000 / portTICK_PERIOD_MS);
 
   // frame_counter = 0;
-  width_resolution = EPD_WIDTH;
-  height_resolution = EPD_HEIGHT;
+  width_resolution = DISPLAY.width;
+  height_resolution = DISPLAY.height;
   //current_buffer = 0;
   memset(clear, 0, 2);
 
-  printf("w %d %d, h %d %d, \n", width_resolution, height_resolution, EPD_WIDTH, EPD_HEIGHT);
+  printf("w %d %d, h %d %d, \n", width_resolution, height_resolution, DISPLAY.width, DISPLAY.height);
 
   esp_log_level_set("wifi", ESP_LOG_NONE);
 
@@ -1152,6 +909,7 @@ void app_main()
   wifi_init_config_t wifi_init_config = WIFI_INIT_CONFIG_DEFAULT();
 
   ESP_ERROR_CHECK(esp_wifi_init(&wifi_init_config));
+    print_free_internal_ram("after esp_wifi_init");
 
   ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
 
@@ -1176,9 +934,6 @@ void app_main()
   draw_black_bytes = (uint8_t *)heap_caps_malloc(129, MALLOC_CAP_SPIRAM);
   draw_white_bytes = (uint8_t *)heap_caps_malloc(129, MALLOC_CAP_SPIRAM);
 
-  // array_with_zeros = array_with_zeros;
-  // draw_black_bytes = draw_black_bytes;
-  // draw_white_bytes = draw_white_bytes;
   memset(array_with_zeros, 0, 129);
   memset(draw_black_bytes, 85, 129);
   memset(draw_white_bytes, 170, 129);
@@ -1187,9 +942,8 @@ void app_main()
   // buffer_queue[0] = xQueueCreate(QUEUE_LENGTH, ITEM_SIZE);
   // buffer_queue[1] = xQueueCreate(QUEUE_LENGTH, ITEM_SIZE);
 
-//print_free_internal_ram("after xqueuecreate");
   switcher = 0;
-  // epd_base_init(EPD_WIDTH);
+  // epd_base_init(DISPLAY.width);
   for (int i = 0; i < REQUIRED_BUFFERS_N; i++){
     buffer_queue[i] = xQueueCreate(QUEUE_LENGTH, ITEM_SIZE);
 
@@ -1206,8 +960,6 @@ void app_main()
     per_frame_settings_arr[i].do_full_refresh = 0;
     per_frame_settings_arr[i].rmt_high_times[0] = 34;
     per_frame_settings_arr[i].rmt_high_times_n = 1;
-    // per_frame_settings_arr[i].rmt_high_times_aux[0] = 45;
-    // per_frame_settings_arr[i].rmt_high_times_aux_n = 1;
     per_frame_settings_arr[i].notes ="somenote";
     per_frame_settings_arr[i].wifi_transfer_size = 247500;
     per_frame_settings_arr[i].framebuffer_data_pos = 11;
@@ -1219,68 +971,35 @@ void app_main()
     per_frame_settings_arr[i].line_changed[0] = 99;
     per_frame_settings_arr[i].frame_buffer = NULL;
   }
+  
+  xTaskCreatePinnedToCore(&tcp_server_task, "tcp_server_task",  1 << 14, NULL, 5, NULL, 1);//tskNO_AFFINITY 1
 
-epd_base_init(EPD_WIDTH);
-epd_temperature_init();
- //epd_init();
-
-  //  epd_push_pixels(epd_full_screen(), 50, 0 );
-        // vTaskDelay(1000 / portTICK_PERIOD_MS);
-
-
-  //print_free_internal_ram("after epd_init");
-  xTaskCreatePinnedToCore(&tcp_server_task, "tcp_server_task", 10000, NULL, 5, NULL, 1);//tskNO_AFFINITY 1
-
-  nvs_handle_t my_handle;
-  esp_err_t err = nvs_open("storage", NVS_READWRITE, &my_handle);
+  nvs_handle_t flash_handle;
+  esp_err_t err = nvs_open("storage", NVS_READWRITE, &flash_handle);
   if (err != ESP_OK)
   {
     printf("Error (%s) opening NVS handle\n", esp_err_to_name(err));
     return;
   }
-  //print_free_internal_ram("after nvs_open");
 
-  //  err = nvs_set_str(my_handle, "id_label", id_label);
-  // if (err != ESP_OK) {
-  //     printf("Error (%s) writing to NVS\n", esp_err_to_name(err));
-  // } else {
-  //     printf("String value written to NVS\n");
-  // }
+  //optional: uncomment this line to set an id_label, start the board, then uncomment and reflash the board, and the value of id_label will remain in flash for ever
+  //set_id_label("your_id_label2", flash_handle); 
 
-  // err = nvs_commit(my_handle);
-  // if (err != ESP_OK) {
-  //     printf("Error (%s) committing NVS\n", esp_err_to_name(err));
-  // }
+  // char * id_label_buffer = (char *)heap_caps_malloc(200, MALLOC_CAP_SPIRAM);
+  // bool id_label_found_in_flash = get_id_label(id_label_buffer, flash_handle);
+
+  // char * id_label_to_print = id_label_found_in_flash ? id_label_buffer : id_label;
 
   while (true)
   {
     if (!connectedToPc)
     {
-      char value[200]; // Assuming the maximum length of the string is 20 characters
-      size_t required_size;
-      err = nvs_get_str(my_handle, "id_label", NULL, &required_size);
-      if (err == ESP_OK)
-      {
-        if (required_size > sizeof(value))
-        sprintf(value, "String value too large for buffer");  //printf("String value too large for buffer\n");
-        else
-        {
-          err = nvs_get_str(my_handle, "id_label", value, &required_size);
-          if (err != ESP_OK)
-            sprintf(value, "Error (%s) reading from NVS", esp_err_to_name(err));
-            // printf("Retrieved value from NVS: %s\n", value);
-            //  else
-           // printf("Error (%s) reading from NVS\n", esp_err_to_name(err));
-        }
-      }
-      else
-          sprintf(value, "Error (%s) reading from NVS", esp_err_to_name(err));   //printf("Error (%s) reading from NVS\n", esp_err_to_name(err));
-
-      printf("{\"ip_adress\": \"%s\", \"id_label\": \"%s\"}\n", ip_adress, value);
+      printf("{\"ip_address\": \"%s\", \"id_label\": \"%s\"}\n", ip_address, id_label);
       // print_free_internal_ram("after printing ip address");
-
     }
     vTaskDelay(1000 / portTICK_PERIOD_MS);
+    if (stop)break;
   }
-  nvs_close(my_handle);
+  nvs_close(flash_handle);
+ // heap_caps_free(id_label_buffer);
 }

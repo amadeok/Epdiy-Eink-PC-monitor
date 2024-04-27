@@ -1,565 +1,291 @@
-#include "epd_driver.h"
 #include "pc_monitor.h"
+#include "epdiy.h"
 #include "i2s_data_bus.h"
+#include "render_i2s.h"
 #include "rmt_pulse.h"
-
 // #include "display_ops.h"
-#include "ed097oc4.h"
+// #include "ed097oc4.h"
+#include <string.h>
 #include "esp_assert.h"
+#include "esp_event.h"
 #include "esp_heap_caps.h"
+#include "esp_log.h"
+#include "esp_netif.h"
 #include "esp_types.h"
+#include "esp_wifi.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "xtensa/core-macros.h"
-#include <string.h>
-#include "esp_wifi.h"
-#include "esp_event.h"
-#include "esp_netif.h"
-#include "esp_log.h"
 
+#include <lwip/netdb.h>
+#include <stdio.h>
+#include "esp_system.h"
 #include "lwip/err.h"
 #include "lwip/sockets.h"
 #include "lwip/sys.h"
-#include <lwip/netdb.h>
+//  #include "app_utils.h"
+// #include "temp.h"
+#include "lut.h"//temp
 
-#define EPD_LINE_BYTES EPD_WIDTH / 4
-#define MULTITASK 0
+float getsecsfloat()
+{
+  int64_t milliseconds = esp_timer_get_time();
 
-extern uint8_t ready1[6];
-// uint8_t *current_chunk;
+  double seconds = (double)milliseconds / 1000000.0;
+  return seconds;
+}
+
+static const epd_ctrl_state_t NoChangeState_pc = {0};
+
+
+//  #if USING_TEMP_FUNCTIONS == 1
+// #define  i2s_output_row i2s_output_row_
+// #define  i2s_start_frame i2s_start_frame_
+// #define  i2s_end_frame i2s_end_frame_
+// #define  epd_renderer_init_basic__ epd_renderer_init_basic_
+
+// #else
+// #define  i2s_output_row i2s_output_row
+// #define  i2s_start_frame i2s_start_frame
+// #define  i2s_end_frame i2s_end_frame
+// #define  epd_renderer_init_basic__ epd_renderer_init_basic
+// #endif
+
+#define EPD_LINE_BYTES DISPLAY.width / 4
+
 long previousT = 0;
 long currentT = 0;
-// uint8_t *dma_buffer;
-
-// extern uint8_t *fc0, *fc1 , *fc2 , *fc3 , *fc4 , *fc5 , *fc6 , *fc7 , *fc8 , *fc9 ;
-
-//  static uint8_t IRAM_ATTR *get_current_chunk_ptr(int chunk_number)
-// {
-//   switch (chunk_number)
-//   {
-//   case 0:
-//     return fc0;
-//   case 1:
-//     return fc1;
-//   case 2:
-//     return fc2;
-//   case 3:
-//     return fc3;
-//   case 4:
-//     return fc4;
-//   case 5:
-//     return fc5;
-//   case 6:
-//     return fc6;
-//   case 7:
-//     return fc7;
-//   case 8:
-//     return fc8;
-//   case 9:
-//     return fc9;
-//   }
-//   return fc0;
-// }
-
-// int IRAM_ATTR switch_framebuffer_n(int n)
-// {
-//   if (n == 0)
-//     n = 1;
-//   else if (n == 1)
-//     n = 0;
-//   return n;
-// }
-// void IRAM_ATTR switch_framebuffer()
-// {
-//   if (current_buffer == 0)
-//     current_buffer = 1;
-//   else if (current_buffer == 1)
-//     current_buffer = 0;
-//   return current_buffer;
-// }
-// int back_buffer()
-// {
-//   int n = 0;
-//   if (current_buffer == 1)
-//     n = 0;
-//   else if (current_buffer == 0)
-//     n = 1;
-//   return n;
-// }
-#include <stdio.h>
-#include "esp_system.h"
 
 uint32_t skipping;
 
-static void write_row(uint32_t output_time_dus)
-{
-  skipping = 0;
-  epd_output_row(output_time_dus);
+
+static void IRAM_ATTR i2s_output_row_pc(uint32_t output_time_dus) {
+    while (i2s_is_busy() || rmt_busy()) {
+    };
+
+    const EpdBoardDefinition* epd_board = epd_current_board();
+    epd_ctrl_state_t* ctrl_state = epd_ctrl_state();
+    epd_ctrl_state_t mask = NoChangeState_pc;
+
+
+    ctrl_state->ep_sth = true;
+    ctrl_state->ep_latch_enable = true;
+    mask.ep_sth = true;
+    mask.ep_latch_enable = true;
+    epd_board->set_ctrl(ctrl_state, &mask);
+
+    mask = NoChangeState_pc;
+    ctrl_state->ep_latch_enable = false;
+    mask.ep_latch_enable = true;
+    epd_board->set_ctrl(ctrl_state, &mask);
+
+    if (epd_get_display()->display_type == DISPLAY_TYPE_ED097TC2) {
+        pulse_ckv_ticks(output_time_dus, 1, false);
+    } else {
+        pulse_ckv_ticks(output_time_dus, 50, false);
+    }
+
+    i2s_start_line_output();
+    i2s_switch_buffer();
 }
 
-void IRAM_ATTR skip_row_(uint8_t pipeline_finish_time)
+// float getsecsfloat() {return 1.0;}
+
+static void IRAM_ATTR i2s_write_row_(uint32_t output_time_dus)
 {
-  // output previously loaded row, fill buffer with no-ops.
-  if (skipping < 2)
-  {
-    memset(epd_get_current_buffer(), 0, EPD_LINE_BYTES);
-    epd_output_row(pipeline_finish_time);
-  }
-  else
-  {
-    epd_skip();
-  }
-  skipping++;
+    i2s_output_row_pc(output_time_dus);
+    skipping = 0;
 }
 
-void IRAM_ATTR pc_monitor_feed_display_with_skip(per_frame_settings *f_i) // frame_info
+static void IRAM_ATTR i2s_skip_row_(uint8_t pipeline_finish_time)
 {
-
-  long time2 = xTaskGetTickCount();
-
-  for (int i = 0; i < f_i->rmt_high_times_n; i++)
-  {
-    uint64_t frame_start = esp_timer_get_time() / 1000;
-
-    int skipped = 0;
-
-    int rmt_time = f_i->rmt_high_times[i];
-#if DEBUG_MSGs == 3
-    ESP_LOGI("F", " fc: %d | rmt: %d | ", frame_counter, rmt_time);
-#endif
-
-#if DEBUG_MSGs == 1
-    printf("#framebuffer_cycle: %d,  frame_counter: %d , rmt timing: %d , mode %d #\n", i, frame_counter, rmt_time, f_i->mode);
-#endif
-
-    epd_start_frame();
-
-    if (enable_skipping == 1 && f_i->total_lines_changed < epd_skip_threshold) // only skip the rows that haven't changed if they are less in number than the specified threshold
+    int line_bytes = DISPLAY.width / 4;
+    // output previously loaded row, fill buffer with no-ops.
+    if (skipping < 2)
     {
-      for (int g = 0; g < EPD_HEIGHT; g++)
-      {
-        if (f_i->line_changed[g] == 0)
-        {
-          skip_row_(rmt_time);
-          continue;
-        }
-
-        memcpy(epd_get_current_buffer(), f_i->frame_buffer + (g * EPD_LINE_BYTES), EPD_LINE_BYTES);
-        write_row(rmt_time);
-
-        // switch (f_i->line_changed[g])
-        // {
-        // case 1:
-        //   memcpy(epd_get_current_buffer(), f_i->frame_buffer + (g * EPD_LINE_BYTES), EPD_LINE_BYTES);
-        //   epd_output_row(rmt_time);
-        //   break;
-        // case 0:
-        // //memset(epd_get_current_buffer(), 0, EPD_LINE_BYTES);
-        //   epd_skip();
-        //  // skipped++;
-        //   //   memcpy(epd_get_current_buffer(), f_i->frame_buffer + (g * EPD_LINE_BYTES), EPD_LINE_BYTES);
-        //   //   epd_output_row(rmt_high_time);
-        //   break;
-        // }
-      }
+        memset((void *)i2s_get_current_buffer(), 0x00, line_bytes);
+        i2s_output_row_pc(pipeline_finish_time);
     }
     else
     {
-      for (int g = 0; g < EPD_HEIGHT; g++)
-      {
-        memcpy(epd_get_current_buffer(), f_i->frame_buffer + (g * EPD_LINE_BYTES), EPD_LINE_BYTES);
-        write_row(rmt_time);
-        //        epd_output_row(rmt_time);
-      }
+        //   printf("-----> pulse_ckv %d\n", skip_count_);
+        if (epd_get_display()->display_type == DISPLAY_TYPE_ED097TC2)
+        {
+            pulse_ckv_ticks(5, 5, false);
+        }
+        else
+        {
+            // According to the spec, the OC4 maximum CKV frequency is 200kHz.
+            pulse_ckv_ticks(45, 5, false);
+        }
     }
-    // }
-    // printf("skipped %d\n", 825-skipped );
-    if (!skipping) // Since we "pipeline" row output, we still have to latch out the last      // row.
-      write_row(f_i->rmt_high_times[i]);
-
-    epd_end_frame();
-    // int MINIMUM_FRAME_TIME_ = MINIMUM_FRAME_TIME; // 10
-    uint64_t frame_end = esp_timer_get_time() / 1000;
-    if (frame_end - frame_start < MINIMUM_FRAME_TIME)
-      vTaskDelay(min_(MINIMUM_FRAME_TIME - (frame_end - frame_start), MINIMUM_FRAME_TIME));
-
-    frame_counter++;
-  }
-#if DEBUG_MSGs == 3 || DEBUG_MSGs == 4
-
-  previousT = currentT;
-  currentT = xTaskGetTickCount();
-  long delta = currentT - previousT;
-  ESP_LOGI("F", "Draw time: %lu %4.3f | dc: %2d/%2d", currentT - time2, 1000 / (float)delta, f_i->draw_count, f_i->nb_draws);
-#endif
-
-  // printf("Draw time: %lu\n", xTaskGetTickCount() - time2);
+    skipping++;
 }
 
-void IRAM_ATTR pc_monitor_feed_display_with_skip_mt()
+void IRAM_ATTR pc_monitor_feed_display_with_skip(per_frame_settings* f_i, bool print_times)// frame_info
 {
-  int current_buf_index;
-
-  while (1)
-  {
-#if DEBUG_MSGs == 3
-    ESP_LOGI("F", " %-30s %-3s %4.3f", "waiting for frame ", "", getsecs());
-#endif
-    xQueueReceive(queue, &current_buf_index, portMAX_DELAY);
-#if DEBUG_MSGs == 3
-    ESP_LOGI("F", " %-30s %-3d %4.3f", "start", current_buf_index, getsecs());
-#endif
-    if (stop == 1)
-    {
-      ESP_LOGI("F", "terminating feed task ");
-      vTaskDelete(NULL);
-    }
-    per_frame_settings *f_i = &per_frame_settings_arr[current_buf_index];
-
-    // int total_lines_changed_ = EPD_HEIGHT;
     long time2 = xTaskGetTickCount();
 
     for (int i = 0; i < f_i->rmt_high_times_n; i++)
     {
-      int skipped = 0;
-      int rmt_time = f_i->rmt_high_times[i];
-      uint64_t frame_start = esp_timer_get_time() / 1000;
+        uint64_t frame_start = esp_timer_get_time() / 1000;
+
+        int rmt_time = f_i->rmt_high_times[i];
+        
+#if DEBUG_MSGs == 3
+        // if (print_times)
+        //     ESP_LOGI("F", " fc: %d | rmt: %d | ", frame_counter, rmt_time);
+#endif
 
 #if DEBUG_MSGs == 1
-      printf("#framebuffer_cycle: %d,  frame_counter: %d , rmt timing: %d , mode %d #\n", i, frame_counter, rmt_time, f_i->mode);
+        if (print_times)
+            printf(  "#framebuffer_cycle: %d,  frame_counter: %d , rmt timing: %d , mode %d #\n", i,   frame_counter, rmt_time, f_i->mode);
 #endif
-      epd_start_frame();
 
+        i2s_start_frame();
 
-      if (enable_skipping == 1 && f_i->total_lines_changed < epd_skip_threshold) // only skip the rows that haven't changed if they are less in number than the specified threshold
-      {
-        for (int g = 0; g < EPD_HEIGHT; g++)
+        if (enable_skipping == 1 && f_i->total_lines_changed < epd_skip_threshold) // only skip the rows that haven't changed if they are less in  number than the specified threshold
         {
-          if (f_i->line_changed[g] == 0)
-          {
-            skip_row_(rmt_time);
-            continue;
-          }
+            for (int g = 0; g < DISPLAY.height; g++)
+            {
+                //  taskYIELD(); testing for multithreading
 
-          memcpy(epd_get_current_buffer(), f_i->frame_buffer + (g * EPD_LINE_BYTES), EPD_LINE_BYTES);
-          write_row(rmt_time);
+                if (f_i->line_changed[g] == 0)
+                {
+                    // skip_line = g;
+                     i2s_skip_row_(rmt_time);
+                    continue;
+                }
 
-          //   switch (f_i->line_changed[g])
-          //   {
-          //   case 1:
-          //    memcpy(epd_get_current_buffer(), f_i->frame_buffer + (g * EPD_LINE_BYTES), EPD_LINE_BYTES);
-          //  //  write_row(rmt_time);
-          //     epd_output_row(rmt_time);
-          //   //  taskYIELD();
-          //     //         printf("%d %d|", g, f_i->line_changed[g]);
-          //     break;
-          //   case 0:
-          //     //skip_row(rmt_time);
-          //     //memset(epd_get_current_buffer(), 0, EPD_LINE_BYTES);
-          //     epd_skip();
-          //     ///  skipped++;
-          //     //   memcpy(epd_get_current_buffer(), f_i->frame_buffer + (g * EPD_LINE_BYTES), EPD_LINE_BYTES);
-          //     //   epd_output_row(rmt_high_time);
-          //     break;
-          //   }
+                 memcpy(   i2s_get_current_buffer(), f_i->frame_buffer + (g * EPD_LINE_BYTES),     EPD_LINE_BYTES);
+                 i2s_write_row_(rmt_time);
+            }
         }
-      }
-      else
-      {
-        for (int g = 0; g < EPD_HEIGHT; g++)
+        else
         {
-          memcpy(epd_get_current_buffer(), f_i->frame_buffer + (g * EPD_LINE_BYTES), EPD_LINE_BYTES);
-          // epd_output_row(rmt_time);
-          write_row(rmt_time);// taskYIELD();
+            for (int g = 0; g < DISPLAY.height; g++)
+            {
+                 memcpy(    i2s_get_current_buffer(), f_i->frame_buffer + (g * EPD_LINE_BYTES),     EPD_LINE_BYTES);
+                 i2s_write_row_(rmt_time);
+            }
         }
-      }
-      if (!skipping) // Since we "pipeline" row output, we still have to latch out the last      // row.
-        write_row(f_i->rmt_high_times[i]);
+        if (!skipping)
+             i2s_write_row_(f_i->rmt_high_times[i]);
 
-      epd_end_frame();
+         i2s_end_frame();
+        uint64_t frame_end = esp_timer_get_time() / 1000;
+        // if (frame_end - frame_start < MINIMUM_FRAME_TIME)
+        //   //  vTaskDelay(min_(MINIMUM_FRAME_TIME - (frame_end - frame_start), MINIMUM_FRAME_TIME));
 
-      uint64_t frame_end = esp_timer_get_time() / 1000;
-      if (frame_end - frame_start < MINIMUM_FRAME_TIME)
-        vTaskDelay(min_(MINIMUM_FRAME_TIME - (frame_end - frame_start), MINIMUM_FRAME_TIME));
+        // frame_counter++;
     }
 
-#if DEBUG_MSGs == 4
-    previousT = currentT;
-    currentT = xTaskGetTickCount();
-    long delta = currentT - previousT;
-    ESP_LOGI("F", " Draw time: %lu %4.3f | dc: %2d/%2d", currentT - time2, 1000 / (float)delta, f_i->draw_count, f_i->nb_draws);
-#endif
-#if DEBUG_MSGs == 3
-    ESP_LOGI("F", " %-30s %-3d %4.3f", "end", current_buf_index, getsecs());
-#endif
-    if (!stop)
-      xQueueSend(buffer_queue[current_buf_index], &current_buf_index, portMAX_DELAY);
-    else
+#if DEBUG_MSGs == 3 || DEBUG_MSGs == 4
+    if (print_times)
     {
-      printf("terminating feed task \n");
-      vTaskDelete(NULL);
+        previousT = currentT;
+        currentT = xTaskGetTickCount();
+        long delta = currentT - previousT;
+        ESP_LOGI("F", "Draw time: %lu %4.3f | dc: %2d/%2d", currentT - time2, 1000 / (float)delta, f_i->draw_count, f_i->nb_draws);
     }
-  }
+#endif
+    printf("Draw time: %lu\n", xTaskGetTickCount() - time2);
 }
 
-// void IRAM_ATTR pc_monitor_feed_display(int total_lines_changed)
-// {
-//   long time2 = xTaskGetTickCount();
-//   int f_i->rmt_high_times_n;
-//   if (mouse_moved == 1 && total_lines_changed < framebuffer_cycles_2_threshold)
-//     f_i->rmt_high_times_n = framebuffer_cycles_2;
-//   else
-//     f_i->rmt_high_times_n = framebuffer_cycles;
-
-//   for (int i = 0; i < f_i->rmt_high_times_n; i++)
-//   {
-
-//     epd_start_frame();
-
-//     for (int h = 0; h < nb_chunks; h++)
-//     {
-//       current_chunk = get_current_chunk_ptr(h);
-//       int offset = (h * EPD_HEIGHT);
-
-//       for (int g = 0; g < EPD_HEIGHT; g++)
-//       {
-//         memcpy(epd_get_current_buffer(), current_chunk + (g * EPD_LINE_BYTES), EPD_LINE_BYTES);
-//         epd_output_row(rmt_high_time);
-//       }
-//     }
-//     epd_end_frame();
-
-//     //   frame_counter++;
-//   }
-//   printf("draw time: %lu\n", xTaskGetTickCount() - time2);
-// }
-
-// void IRAM_ATTR pc_monitor_feed_display_multithreaded_v1()
-// {
-//   printf("pc_monitor_feed_display_multithreaded \n");
-//   rmt_high_time = 150;
-//   int sleep_time = 1;
-
-//   xSemaphoreTake(begin, 9999999);
-//   vTaskDelay(1000 / portTICK_PERIOD_MS);
-
-//   while (1)
-//   {
-
-//     renderer_chunk_counter = 0;
-//     while (renderer_chunk_counter == downloader_chunk_counter)
-//     { //vTaskDelay(sleep_time / portTICK_PERIOD_MS);
-//     };
-//     long time2 = xTaskGetTickCount();
-
-//     epd_start_frame();
-
-//     for (int b = 0; b < EPD_HEIGHT; b++)
-//     {
-//       memcpy(epd_get_current_buffer(), framebuffer_chunks[0] + (b * EPD_LINE_BYTES), EPD_LINE_BYTES);
-//       epd_output_row(rmt_high_time);
-//       // output_row(rmt_high_time, 1, framebuffer_chunks[0] + b * EPD_LINE_BYTES);
-//     }
-//     renderer_chunk_counter++;
-//     //    printf("rend cc %d \n", downloader_chunk_counter);
-
-//     for (int h = 0; h < nb_chunks - 1; h++)
-//     {
-
-//       while (renderer_chunk_counter == downloader_chunk_counter)
-//       { //vTaskDelay(sleep_time / portTICK_PERIOD_MS);
-//       };
-
-//       for (int g = 0; g < EPD_HEIGHT * (nb_chunks - 1); g++)
-//         epd_skip();
-//       for (int g = 0; g < EPD_HEIGHT; g++)
-//       {
-//         memcpy(epd_get_current_buffer(), framebuffer_chunks[h + 1] + (g * EPD_LINE_BYTES), EPD_LINE_BYTES);
-//         epd_output_row(rmt_high_time);
-//         //  output_row(rmt_high_time, 1, framebuffer_chunks[h + 1] + (g * EPD_LINE_BYTES));
-//       }
-
-//       renderer_chunk_counter++;
-//       // printf("rend cc %d \n", downloader_chunk_counter);
-//     }
-//     epd_end_frame();
-
-//     renderer_chunk_counter = 0;
-
-//     int time3 = (xTaskGetTickCount() - time2);
-
-//     printf("draw time: %d\n", time3);
-//     //  printf("r: %d lp = %d \n", time3, frame_counter);
-
-//     //  frame_counter++;
-//   }
-// }
-
-// void IRAM_ATTR pc_monitor_feed_display_multithreaded_v1_one_chunk()
-// {
-//   printf("pc_monitor_feed_display_multithreaded_v1_onechunk \n");
-//   int rmt_time;
-
-//   renderer_frame_counter = 0;
-
-//   xSemaphoreTake(begin, 9999999);
-//   vTaskDelay(1000 / portTICK_PERIOD_MS);
-
-//   while (1)
-//   {
-// #if DEBUG_MSGs == 2
-//     printf("r0 render loop \n");
-// #endif
-//     renderer_chunk_counter = 0;
-//     uint8_t *ptr = NULL;
-//     uint8_t *ptr_b = NULL;
-
-//     while (renderer_frame_counter == downloader_frame_counter || clearing )
-//     {
-//       if (stop == 1)
-//       {
-//         printf("terminating render task \n");
-//         vTaskDelete(NULL);
-//       }
-//       vTaskDelay(1 / portTICK_PERIOD_MS);
-//     };
-
-//     tr0 = xTaskGetTickCount();
-
-//     ptr = get_current_chunk_ptr(current_buffer);
-
-//     for (int y = 0; y < framebuffer_cycles; y++)
-//     {
-//       renderer_busy = 1;
-//       if (mode == 10)
-//         rmt_time = draw_rmt_times[frame_counter];
-//       else
-//         rmt_time = draw_rmt_times[y];
-
-//       epd_start_frame();
-
-//       for (int b = 0; b < EPD_HEIGHT; b++)
-//       {
-//         memcpy(epd_get_current_buffer(), ptr + (b * EPD_LINE_BYTES), EPD_LINE_BYTES);
-//         epd_output_row(rmt_time);
-//         // output_row(rmt_high_time, 1, framebuffer_chunks[0] + b * EPD_LINE_BYTES);
-//       }
-//     }
-//     epd_end_frame();
-//     switch_framebuffer();
-//     renderer_busy = 0;
-
-//     tr1 = xTaskGetTickCount();
-
-// #if DEBUG_MSGs == 2
-//     printf("r2 fc %lu \n", renderer_frame_counter);
-//     printf("r3 draw time: %lu | tr1, tr0:  %lu, %lu \n", tr1 - tr0, tr0, tr1);
-// #else
-//     printf("draw time: %lu\n", tr1 - tr0);
-// #endif
-//     renderer_frame_counter++;
-
-//     //  printf("r: %d lp = %d \n", time3, frame_counter);
-//     if (renderer_frame_counter == 4294967290)
-//       renderer_frame_counter = 0;
-
-//     // frame_counter++;
-//   }
-// }
-
-// void IRAM_ATTR signal_245_fifo(const int sock)
-// {
-//   send(sock, "ready0", 6, 0);
-
-//   recv(sock, ready1, 6, 0);
-//   epd_start_frame();
-
-//   for (int h = 0; h > 100; h++)
-//   {
-//     send(sock, "ready0", 6, 0);
-//     vTaskDelay(100 / portTICK_PERIOD_MS);
-//    // output_row_245(150);
-//   }
-//   epd_end_frame();
-// }
-
-// void IRAM_ATTR pc_monitor_feed_display_multithreaded_v2()
-// {
-//   printf("pc_monitor_feed_display_multithreaded \n");
-//   rmt_high_time = 150;
-
-//   xSemaphoreTake(begin, 9999999);
-//   vTaskDelay(1000 / portTICK_PERIOD_MS);
-
-//   while (1)
-//   {
-
-//     renderer_chunk_counter = 0;
-//     while (renderer_chunk_counter == downloader_chunk_counter)
-//     { //vTaskDelay(sleep_time / portTICK_PERIOD_MS);
-//     };
-//     long time2 = xTaskGetTickCount();
-//     for (int j = 0; j < 3; j++)
-//     {
-//       epd_start_frame();
-
-//       for (int b = 0; b < EPD_HEIGHT; b++)
-//       {
-//         memcpy(epd_get_current_buffer(), framebuffer_chunks[0] + (b * EPD_LINE_BYTES), EPD_LINE_BYTES);
-//         epd_output_row(rmt_high_time);
-//         // output_row(rmt_high_time, 1, framebuffer_chunks[0] + b * EPD_LINE_BYTES);
-//       }
-//       epd_end_frame();
-//     }
-//     renderer_chunk_counter++;
-//     //    printf("rend cc %d \n", downloader_chunk_counter);
-
-//     for (int h = 0; h < nb_chunks - 1; h++)
-//     {
-
-//       while (renderer_chunk_counter == downloader_chunk_counter)
-//       { //vTaskDelay(sleep_time / portTICK_PERIOD_MS);
-//       };
-//       for (int j = 0; j < 3; j++)
-//       {
-//         epd_start_frame();
-
-//         for (int g = 0; g < EPD_HEIGHT * (h + 1); g++)
-//           epd_skip();
-//         for (int g = 0; g < EPD_HEIGHT; g++)
-//         {
-//           memcpy(epd_get_current_buffer(), framebuffer_chunks[h + 1] + (g * EPD_LINE_BYTES), EPD_LINE_BYTES);
-//           epd_output_row(rmt_high_time);
-//           //  output_row(rmt_high_time, 1, framebuffer_chunks[h + 1] + (g * EPD_LINE_BYTES));
-//         }
-//         epd_end_frame();
-//       }
-//       renderer_chunk_counter++;
-//       // printf("rend cc %d \n", downloader_chunk_counter);
-//     }
-
-//     renderer_chunk_counter = 0;
-
-//     int time3 = (xTaskGetTickCount() - time2);
-
-//     printf("draw time: %d\n", time3);
-//     //  printf("r: %d lp = %d \n", time3, frame_counter);
-
-//     //   frame_counter++;
-//   }
-// }
-
-float getsecs()
+void IRAM_ATTR pc_monitor_feed_display_with_skip_mt()
 {
-  int64_t milliseconds = esp_timer_get_time();
+    int current_buf_index;
 
-  float seconds = (float)milliseconds / 1000000.0;
-  return seconds;
+    while (1)
+    {
+#if DEBUG_MSGs == 3
+         ESP_LOGI("F", " %-30s %-3s %4.3f", "waiting for frame ", "", getsecsfloat());
+#endif
+        xQueueReceive(queue, &current_buf_index, portMAX_DELAY);
+#if DEBUG_MSGs == 3
+         ESP_LOGI("F", " %-30s %-3d %4.3f", "start", current_buf_index, getsecsfloat());
+
+#endif
+#if DEBUG_MSGs == 4
+        long time2 = xTaskGetTickCount();
+#endif
+        if (stop == 1)
+        {
+            ESP_LOGI("F", "terminating feed task ");
+            vTaskDelete(NULL);
+        }
+        per_frame_settings *f_i = &per_frame_settings_arr[current_buf_index];
+        pc_monitor_feed_display_with_skip(f_i, false);
+
+        //   //skip_count_ = 0;
+        //     for (int i = 0; i < f_i->rmt_high_times_n; i++)
+        //     {
+        //       // int skipped = 0;
+        //       int rmt_time = f_i->rmt_high_times[i];
+        //       uint64_t frame_start = esp_timer_get_time() / 1000;
+        // #if DEBUG_MSGs == 1
+        //       printf("#framebuffer_cycle: %d,  frame_counter: %d , rmt timing: %d , mode %d
+        //       #\n", i, frame_counter, rmt_time, f_i->mode);
+        // #endif
+        //       i2s_start_frame();
+        //       if (enable_skipping == 1 && f_i->total_lines_changed < epd_skip_threshold) //
+        //       only skip the rows that haven't changed if they are less in number than the
+        //       specified threshold
+        //       {
+        //         for (int g = 0; g < DISPLAY.height; g++)
+        //         {
+        //        //   printf("i %3d sc %3d ft %3d sk %3d cond %3d \n", g,  skip_count_,
+        //        rmt_time, skipping, f_i->line_changed[g] == 0);
+        //           if (f_i->line_changed[g] == 0)
+        //           {
+        //             i2s_skip_row_(rmt_time);
+        //             continue;
+        //           }
+        //           memcpy(i2s_get_current_buffer(), f_i->frame_buffer + (g * EPD_LINE_BYTES),
+        //           EPD_LINE_BYTES); i2s_write_row_(rmt_time);
+        //         }
+        //       }
+        //       else
+        //       {
+        //         for (int g = 0; g < DISPLAY.height; g++)
+        //         {
+        //           memcpy(i2s_get_current_buffer(), f_i->frame_buffer + (g * EPD_LINE_BYTES),
+        //           EPD_LINE_BYTES);
+        //           // i2s_output_row_pc(rmt_time);
+        //           i2s_write_row_(rmt_time);// taskYIELD();
+        //         }
+        //       }
+        //       if (!skipping) // Since we "pipeline" row output, we still have to latch out
+        //       the last      // row.
+        //         i2s_write_row_(f_i->rmt_high_times[i]);
+        //       i2s_end_frame();
+        //       uint64_t frame_end = esp_timer_get_time() / 1000;
+        //       if (frame_end - frame_start < MINIMUM_FRAME_TIME)
+        //         vTaskDelay(min_(MINIMUM_FRAME_TIME - (frame_end - frame_start),
+        //         MINIMUM_FRAME_TIME));
+        //     }
+
+#if DEBUG_MSGs == 4
+        previousT = currentT;
+        currentT = xTaskGetTickCount();
+        long delta = currentT - previousT;
+        ESP_LOGI("F", " Draw time: %lu %4.3f | dc: %2d/%2d", currentT - time2, 1000 / (float)delta, f_i->draw_count, f_i->nb_draws);
+#endif
+#if DEBUG_MSGs == 3
+         ESP_LOGI("F", " %-30s %-3d %4.3f", "end", current_buf_index, getsecsfloat());
+#endif
+        if (!stop)
+            xQueueSend(buffer_queue[current_buf_index], &current_buf_index, portMAX_DELAY);
+        else
+        {
+            printf("terminating feed task \n");
+            vTaskDelete(NULL);
+        }
+    }
 }
 
 void print_per_frame_settings(per_frame_settings *settings)
 {
-  // printf("signal: %d\n", settings->signal);
   printf("mouse_moved: %d\n", settings->mouse_moved);
   printf("mode: %d\n", settings->mode);
   printf("do_full_refresh: %d\n", settings->do_full_refresh);
@@ -576,18 +302,123 @@ void print_per_frame_settings(per_frame_settings *settings)
   printf("type: %s\n", settings->type);
 
   printf("notes: %s\n", settings->notes);
-  // printf("wifi_transfer_size: %d\n", settings->wifi_transfer_size);
-  // printf("framebuffer_data_pos: %d\n", settings->frame_buffer_data_pos);
   printf("framebuffer_data_size: %d\n", settings->framebuffer_data_size);
-  // printf("line_changed_pos: %d\n", settings->line_changed_pos);
   printf("draw_count: %d\n", settings->draw_count);
   printf("total_lines_changed: %d\n", settings->total_lines_changed);
   printf("_need_to_extract: %d\n", settings->need_to_extract);
 
   printf("line_changed:  %3d %3d \n", settings->line_changed[0], settings->line_changed[1]);
-  // for (int i = 0; i < settings->total_lines_changed; i++) {
-  //     printf("%d ", settings->line_changed[i]);
-  // }
 
-  //  printf("\n");
 }
+
+
+// const EpdDisplay_t *epd_get_display_()
+// {
+//     return display_;
+// }
+
+// const EpdBoardDefinition *epd_current_board_()
+// {
+//     return epd_board_;
+// }
+
+// EpdRect epd_full_screen_() {
+//   EpdRect area = {.x = 0, .y = 0, .width = DISPLAY.width, .height = DISPLAY.height};
+//   return area;
+// }
+
+// void IRAM_ATTR epd_push_pixels_i2s_(RenderContext_t *ctx, EpdRect area, short time, int color) {
+
+//     int line_bytes = ctx->display_width / 4;
+//     uint8_t row[line_bytes];
+//     memset(row, 0, line_bytes);
+
+//     const uint8_t color_choice[4] = {DARK_BYTE, CLEAR_BYTE, 0x00, 0xFF};
+//     for (uint32_t i = 0; i < area.width; i++) {
+//         uint32_t position = i + area.x % 4;
+//         uint8_t mask =
+//             color_choice[color] & (0b00000011 << (2 * (position % 4)));
+//         row[area.x / 4 + position / 4] |= mask;
+//     }
+//     reorder_line_buffer((uint32_t *)row, line_bytes);
+
+//     i2s_start_frame();
+
+//     for (int i = 0; i < ctx->display_height; i++) {
+//         // before are of interest: skip
+//         if (i < area.y) {
+//             i2s_skip_row_( time);
+//             // start area of interest: set row data
+//         } else if (i == area.y) {
+//             i2s_switch_buffer();
+//             memcpy((void*)i2s_get_current_buffer(), row, line_bytes);
+//             i2s_switch_buffer();
+//             memcpy((void*)i2s_get_current_buffer(), row, line_bytes);
+
+//             i2s_write_row_( time * 10);
+//             // load nop row if done with area
+//         } else if (i >= area.y + area.height) {
+//             i2s_skip_row_( time);
+//             // output the same as before
+//         } else {
+//             i2s_write_row_( time * 10);
+//         }
+//     }
+//     // Since we "pipeline" row output, we still have to latch out the last row.
+//     i2s_write_row_( time * 10);
+
+//     i2s_end_frame();
+// }
+
+
+// void epd_clear_area_cycles_(EpdRect area, int cycles, int cycle_time) {
+//     const short white_time = cycle_time;
+//     const short dark_time = cycle_time;
+
+//     for (int c = 0; c < cycles; c++) {
+//         for (int i = 0; i < 10; i++) {
+//             epd_push_pixels_i2s_(&render_context_, area, dark_time, 0);
+//         }
+//         for (int i = 0; i < 10; i++) {
+//             epd_push_pixels_i2s_(&render_context_, area, white_time, 1);
+//         }
+//         for (int i = 0; i < 2; i++) {
+//             epd_push_pixels_i2s_(&render_context_, area, white_time, 2);
+//         }
+//     }
+// }
+// const int clear_cycle_time_ = 12;
+
+
+// void epd_clear_area_(EpdRect area) {
+//     epd_clear_area_cycles_(area, 3, clear_cycle_time_);
+// }
+
+// void epd_clear_() { epd_clear_area_(epd_full_screen_()); }
+
+// static epd_ctrl_state_t ctrl_state_;
+
+// void epd_control_reg_init_() {
+//   ctrl_state_.ep_latch_enable = false;
+//   ctrl_state_.ep_output_enable = false;
+//   ctrl_state_.ep_sth = true;
+//   ctrl_state_.ep_mode = false;
+//   ctrl_state_.ep_stv = true;
+//   epd_ctrl_state_t mask = {
+//     .ep_latch_enable = true,
+//     .ep_output_enable = true,
+//     .ep_sth = true,
+//     .ep_mode = true,
+//     .ep_stv = true,
+//   };
+
+//   epd_board_->set_ctrl(&ctrl_state_, &mask);
+// }
+
+// void epd_poweron_() {
+//   epd_current_board__()->poweron(&ctrl_state_);
+// }
+
+// void epd_poweroff_() {
+//   epd_current_board__()->poweroff(&ctrl_state_);
+// }

@@ -1,6 +1,6 @@
 import platform, ctypes
 import configparser
-import json
+import json, cv2
 
 from numpy.lib.type_check import imag
 
@@ -64,12 +64,15 @@ def t(text=None):
 
 modes =  {
     "monochrome" : 0,    "Bayer16" : 1,    "Bayer8" : 2,    "Bayer4" : 3,    "Bayer3" : 4,
-    "Bayer2" : 5,     "FS" : 6,     "SierraLite" : 7, 	     "Sierra" : 8,    "PIL_dither" : 9,
-      "4grayscale": 10
+    "Bayer2" : 5,     "FS" : 6,     "SierraLite" : 7, 	     "Sierra" : 8, 
+    # "PIL_dither" : 9,
+    #"4grayscale": 10
 }
+
 polarize_modes =  {
     "off" : 0,    "rgb" : 1,    "L" : 2
 }
+
 def get_mode(dict, mode_code):
     return [k for k,v in dict.items() if v == mode_code][0]
 
@@ -102,6 +105,20 @@ def eval_args(self):
     nb_arg = len(sys.argv)
     nb_displays = nb_arg -1
     return nb_displays
+
+
+def apply_pole_method_grayscale(ctx, opencv_image):
+    ctx.np_arr = np.ravel(opencv_image)
+    dith.polarize_(ctx.np_arr, ctx.pole_factor,ctx.pole_pivot, ctx.tot_nb_pixels)
+    opencv_image = ctx.np_arr.reshape(opencv_image.shape)
+    return opencv_image
+
+def apply_pole_menthod_rgb(ctx, opencv_image):
+    opencv_image = cv2.cvtColor(opencv_image, cv2.COLOR_RGBA2BGR)
+    ctx.np_arr = np.ravel(opencv_image)
+    dith.polarize_(ctx.np_arr, ctx.pole_factor, ctx.pole_pivot, ctx.tot_nb_pixels*3)
+    opencv_image = ctx.np_arr.reshape(opencv_image.shape)
+    return opencv_image
 
 def setup_shared_memory(self):
     from random import randint
@@ -183,19 +200,6 @@ class display_settings(object):
             s2 = generate_sequence(end, start, num_elements)
             return s1 + s2[1:-1] + [start]
         
-        s1 = generate_sequence(200, 200, 3)
-        s2 = generate_sequence(100, 20, 7)
-
-
-        self.draws_conf = {
-            "draw_list": [
-                 
-
-                {"type": "black_and_white", "rmt_high_times": [120 for x in range(6)]} ,
-                #  {"type": "black_and_white", "rmt_high_times": [30 for x in range(2)]} ,
-                #    {"type": "white", "rmt_high_times": [100 for x in range(3)]},
-            ]
-        }
         
         self.a = args
         self.width_res2 = self.width + self.x_offset
@@ -213,48 +217,31 @@ class display_settings(object):
 
         self.byte_string_list = [bytearray([1] * 1*1), bytearray(b'\x00')]
 
-        self.dif_list_sum = 1
         self.switcher = 0
-        self.dif_list = bytearray(self.height+2)
-        self.dif_list_ori = bytearray(self.height+2) 
+
         self.configuration_file = configuration_file
         self.log = f"Python ID {self.id}: " 
         self.complete_output_file = f'{working_dir}/image_id_{self.id}.bmp'
         self.settings_dither = 0
-        self.twenty_four_bpp = np.full((self.width* self.height * 3), 255, dtype=np.uint8)
         self.np_arr = None
 
                 
         self.nb_draws = len(self.draws_conf["draw_list"])
-        if self.mode == "4grayscale" or self.nb_draws > 1 or 1: # or draw_white_first
-           # self.nb_chunks ==  1  #5 breaks things
+        if 1: #self.mode == "4grayscale" or self.nb_draws > 1 or 1: # or draw_white_first
             self.pipe_bit_depth = 8
             self.eight_bpp = np.full((self.width, self.height), 255, dtype=np.uint8)
             self.byte_string_list = [self.eight_bpp, self.eight_bpp]
-            # if self.mode == "4grayscale":
-            #     self.grayscale_shades = 4
-            #     #self.framebuffer_cycles = 1
-            # else:
-            #     self.grayscale_shades = 2 #black and white
         else: 
-           # self.nb_chunks = 1 #5 breaks things
             self.pipe_bit_depth = 1
             self.eight_bpp = None
-           # self.grayscale_shades = 2
 
-#        self.nb_draws = (self.grayscale_shades -1 )
-        #self.cursor = Image.open('imgs\cursor_thick_alpha_big.png')
-        self.cursor = Image.open('imgs\cursor.png')
+        #self.cursor = Image.open('imgs\cursor.png')
+        self.cursor = cv2.imread('imgs\cursor2.png', cv2.IMREAD_UNCHANGED) 
+        if self.cursor.shape[2] == 3:
+            self.cursor = cv2.cvtColor(self.cursor, cv2.COLOR_BGR2RGBA)
 
-        # if self.draw_white_first: 
-        #     self.nb_draws = self.nb_draws*2
-
-        # if self.nb_draws> self.framebuffer_cycles: 
-        #     self.nb_rmt_times = self.nb_draws
-        # else: self.nb_rmt_times = self.framebuffer_cycles
         self.setup_settings_bytearray()
-        # if self.esp32_multithread:
-        #     self.nb_chunks = 1
+
         self.mouse_moved = 0
         self.settings_changed = 0
         #self.check_resize()
@@ -263,16 +250,12 @@ class display_settings(object):
         else: self.wifi_on = 1
         setup_shared_memory(self)
         self.mode = read_dither_method(self)
-        self.pole_factor = float(self.polarize.split(',')[0])
-        self.pole_pivot = int(self.polarize.split(',')[1])
-        self.pole_mode = self.polarize.split(',')[2]
-        # if self.esp32_multithread and self.draw_white_first:
-        #     print("esp32_multithread and draw_white_first cannot be on at the same time, disabling esp32_multithread")
-        #     self.esp32_multithread = 0
+        # self.pole_factor = float(self.polarize.split(',')[0])
+        # self.pole_pivot = int(self.polarize.split(',')[1])
+        # self.pole_mode = self.polarize.split(',')[2]
+
 
     def setup_settings_bytearray(self):
-        # line_changed_pos = ((self.height*self.width)//4)*2 #size of  wifi_transfer_buffer in c++
-        # line_changed_pos -= self.height+2
 
         self.pipe_settings = {"signal": -1,
                               "mouse_moved": 0,
@@ -291,23 +274,7 @@ class display_settings(object):
                               "rotation": self.rotation,
                               "pipe_bit_depth": self.pipe_bit_depth
                               }# bytearray(b'\x00\x00\x00')
-        print()
-        # if isinstance(self.rmt_high_time , str):
-        #     self.draw_rmt_times = self.rmt_high_time.split(':')
-        # else: self.draw_rmt_times = [str(self.rmt_high_time)]
-        # for q in range(len(self.draw_rmt_times)):
-        #     self.draw_rmt_times[q] = int(self.draw_rmt_times[q]);
-        #     if q < max(self.nb_rmt_times, 2):
-        #         self.pipe_settings += self.draw_rmt_times[q].to_bytes(2, 'little')
-        # if len(self.draw_rmt_times) < self.nb_rmt_times:
-        #     #print("Warning: not enough rmt high times for each framebuffer cycle have been specified")
-        #     dif = self.nb_rmt_times - len(self.draw_rmt_times)
-        #     for w in range(dif):
-        #         self.draw_rmt_times.append(self.draw_rmt_times[0]);
-        #         if q < self.nb_rmt_times:
-        #             self.pipe_settings += self.draw_rmt_times[0].to_bytes(2, 'little')
-        # self.pipe_settings_size = len(self.pipe_settings)
-        # print("pipe_settings_size", self.pipe_settings_size)
+
 
 
 
@@ -339,7 +306,8 @@ def read_dither_method(ctx):
         return prev
 
     else:
-        print("Invalid dither method selected, setting monochrome") 
+        print("Invalid dither method selected") 
+        raise Exception("Invalid dither method selected, options are:", modes)
         return "monochrome"
 
 def get_display_settings(conf_file, args):
@@ -450,71 +418,6 @@ def get_raw_pixels(image_file, file_path, save_raw_file, switcher):
     return [ctx.byte_string_list[switcher], byte_string_raw, ctx.byte_string_list]
 
 
-def check_for_difference_esp_fun(array_list, mss_raw=None):
-    if ctx.pipe_bit_depth == 8:
-        divider = 1
-    elif ctx.pipe_bit_depth == 1: divider = 8
-    if mss_raw:
-        divider = 0.25
-    chunk_size = int(ctx.width//divider)
-    startt = 0
-    endd = chunk_size
-    #dif_list = ctx.dif_list
-    #[int(0) for v in range(ctx.height+2)]
-    
-    #t0 = time.time()
-    dif_list_sum = 0
-    row = 0
-    if mss_raw:
-        for r in range(ctx.height):
-            if array_list[0][startt:endd] != array_list[1][startt:endd]:
-                dif_list_sum += 1
-                row = r
-                break
-            startt += chunk_size
-            endd += chunk_size
-
-    elif ctx.pipe_bit_depth == 1:
-        for r in range(ctx.height):
-            if array_list[0][startt:endd] != array_list[1][startt:endd]:
-                try:   
-                    ctx.dif_list_ori[r+1] = 1; 
-                except: pass
-                dif_list_sum += 1
-                #print(f"row {r} is different")
-            else:
-                try: 
-                    ctx.dif_list_ori[r+1] = 0; 
-                except: pass
-            startt += chunk_size
-            endd += chunk_size
-
-    elif ctx.pipe_bit_depth == 8:
-        for r in range(ctx.height):
-
-            arr = array_list[0][r]
-            arr2 = array_list[1][r]
-            ret = np.array_equal(arr, arr2)
-            if ret == False:
-                ctx.dif_list_ori[r+1] = 1
-                dif_list_sum += 1
-            # print(f"row {t} is different")
-            else:
-                ctx.dif_list_ori[r+1] = 0
-                #  print(f"not different")
-    # for c in range(33):
-    #     print(dif_list[c*25:(c+1)*25])
-    ctx.dif_list = ctx.dif_list_ori[:]
-    if not mss_raw:
-        for v in range(ctx.height):
-            if ctx.dif_list_ori[v] == 1 or 1:
-                ctx.dif_list[v+1] = 1
-                ctx.dif_list[v+2] = 1
-            
-    ctx.dif_list_sum = dif_list_sum
-
-    return dif_list_sum
-
 def check_and_exit(fd0, fd1):
     global quit_all
     if ctx.a.child_process ==  0:
@@ -523,8 +426,9 @@ def check_and_exit(fd0, fd1):
 
     if end_val == 101:
         try:
-            if linux: os.write(fd0, ctx.shared_buffer[0:2])
-            elif windows: win32file.WriteFile(fd0, ctx.shared_buffer[0:2])
+            if pipe_output:
+                if linux: os.write(fd0, ctx.shared_buffer[0:2])
+                elif windows: win32file.WriteFile(fd0, ctx.shared_buffer[0:2])
         except Exception as e:
             print(f"check and exit e {e}")
             quit_all = True
@@ -542,9 +446,10 @@ def check_and_exit(fd0, fd1):
             ctx.shm_a.close()
         os._exit(0)
         #sys.exit(f'Python capture ID {ctx.id} terminated')
+        
 def pipe_output_f(raw_files, np_image_file, mouse_moved, fd1, fd0):
     global quit_all
-    byte_frag = raw_files[0]
+    byte_frag = raw_files#raw_files[0]
 
     if check_and_exit(fd0,fd1) == -1:
         quit_all = True
@@ -570,9 +475,11 @@ def pipe_output_f(raw_files, np_image_file, mouse_moved, fd1, fd0):
     #     #check_for_difference_esp_fun(raw_files[2])
     #     if linux: os.write(fd0, ctx.dif_list[0:ctx.height])
     #     elif windows: win32file.WriteFile(fd0, ctx.dif_list[0:ctx.height])
-    
+    # cv2.imshow('output_image_byte', byte_frag)
+    # cv2.waitKey(1)
+
     if linux: os.write(fd0, byte_frag)
-    elif windows: win32file.WriteFile(fd0, byte_frag)
+    elif windows: win32file.WriteFile(fd0, np.ravel(byte_frag))
     return byte_frag
 
 def w_shm(obj, increase, type):
@@ -703,36 +610,37 @@ def check_key_presses(PID_list, conf):
                         os.kill(PID_list[v], 9)
                 os.kill(PID_list[0], 9)
             except: pass    
-        def fun_m(self):
-            ctx.settings_dither = 1
+            
+        # def fun_m(self):
+        #     ctx.settings_dither = 1
 
-            ctx.mode = "monochrome"
-            w_shm(conf.mode, 0, 'a');  print("Monochrome mode is on ", r_shm(conf.mode, 'i'))
-            time.sleep(self.sl)
-            ctx.settings_dither = 0
+        #     ctx.mode = "monochrome"
+        #     w_shm(conf.mode, 0, 'a');  print("Monochrome mode is on ", r_shm(conf.mode, 'i'))
+        #     time.sleep(self.sl)
+        #     ctx.settings_dither = 0
 
-        def fun_p(self):
-            ctx.settings_dither = 1
-            ctx.mode = "PIL_dither"
-            w_shm(conf.mode, 9, 'a'); print("Pil dithering mode is on ", r_shm(conf.mode, 'i'))
+        # def fun_p(self):
+        #     ctx.settings_dither = 1
+        #     ctx.mode = "PIL_dither"
+        #     w_shm(conf.mode, 9, 'a'); print("Pil dithering mode is on ", r_shm(conf.mode, 'i'))
 
-            time.sleep(self.sl)
-            ctx.settings_dither = 0
+        #     time.sleep(self.sl)
+        #     ctx.settings_dither = 0
 
-        def fun_d(self):
-            ctx.settings_dither = 1
-            ctx.mode = read_dither_method(ctx)
-            w_shm(conf.mode, modes.get(ctx.mode), 'a')
-            print(f"Dithering mode {ctx.mode} is on {r_shm(conf.mode, 'i')}" )    
-            time.sleep(self.sl)
-            ctx.settings_dither = 0
+        # def fun_d(self):
+        #     ctx.settings_dither = 1
+        #     ctx.mode = read_dither_method(ctx)
+        #     w_shm(conf.mode, modes.get(ctx.mode), 'a')
+        #     print(f"Dithering mode {ctx.mode} is on {r_shm(conf.mode, 'i')}" )    
+        #     time.sleep(self.sl)
+        #     ctx.settings_dither = 0
 
-        def fun_i(self):
-            inv = r_shm(conf.invert, 'i')
-            if inv != 0:
-                w_shm(conf.invert, 0, 'a');  print("Invert is off ", r_shm(conf.invert, 'i'))
-            elif inv != 1:
-                w_shm(conf.invert, 1, 'a'),  print("Invert is on ", r_shm(conf.invert, 'i'))
+        # def fun_i(self):
+        #     inv = r_shm(conf.invert, 'i')
+        #     if inv != 0:
+        #         w_shm(conf.invert, 0, 'a');  print("Invert is off ", r_shm(conf.invert, 'i'))
+        #     elif inv != 1:
+        #         w_shm(conf.invert, 1, 'a'),  print("Invert is on ", r_shm(conf.invert, 'i'))
      
         def fun_s(self):
             selective_invert = r_shm(conf.selective_invert, 'i')
@@ -745,16 +653,25 @@ def check_key_presses(PID_list, conf):
 
        # def fun_g(self):
        #     w_shm(conf.mode, 10, 'a');  print("greyscale mode is on ", r_shm(conf.mode, 'i'))
-        def fun_w(self): w_shm(conf.polarize_factor, -0.1, 'f');  print("polarize_factor is  ", r_shm(conf.polarize_factor, 'f') + ctx.pole_factor)
-        def fun_e(self): w_shm(conf.polarize_factor, +0.1, 'f');  print("polarize_factor is  ", r_shm(conf.polarize_factor, 'f')+ ctx.pole_factor)
-        def fun_k(self):
-            pole_mode = r_shm(conf.pole_mode, 'i')
-            if pole_mode == 2:
-                pole_mode = -1
-            w_shm(conf.pole_mode, pole_mode+1, 'a')
-            ctx.pole_mode = get_mode(polarize_modes, (r_shm(conf.pole_mode, 'i')))
-            print("pole_mode ", ctx.pole_mode)
-
+        # def fun_w(self): w_shm(conf.polarize_factor, -0.1, 'f');  print("polarize_factor is  ", r_shm(conf.polarize_factor, 'f') + ctx.pole_factor)
+        # def fun_e(self): w_shm(conf.polarize_factor, +0.1, 'f');  print("polarize_factor is  ", r_shm(conf.polarize_factor, 'f')+ ctx.pole_factor)
+        # def fun_k(self):
+        #     pole_mode = r_shm(conf.pole_mode, 'i')
+        #     if pole_mode == 2:
+        #         pole_mode = -1
+        #     w_shm(conf.pole_mode, pole_mode+1, 'a')
+        #     ctx.pole_mode = get_mode(polarize_modes, (r_shm(conf.pole_mode, 'i')))
+        #     print("pole_mode ", ctx.pole_mode)
+        def fun_o(self):
+            val = r_shm(conf.polarize_text, "i")
+            self.polarize_text = 1-val
+            w_shm(conf.polarize_text,  self.polarize_text, 'a')
+            print("polarize_text is  ",  self.polarize_text)
+        def fun_h(self):
+            val = r_shm(conf.fill_blacks, "i")
+            self.fill_blacks = 1-val
+            w_shm(conf.fill_blacks, self.fill_blacks, 'a')
+            print("fill_blacks is  ", self.fill_blacks)
         def fun_1(self): w_shm(conf.color, -0.1, 'f')
         def fun_2(self): w_shm(conf.color, +0.1, 'f')
         def fun_3(self): w_shm(conf.contrast, -0.1, 'f')
@@ -765,16 +682,16 @@ def check_key_presses(PID_list, conf):
         def fun_8(self): w_shm(conf.sharpness, +0.1, 'f')
         def fun_9(self): w_shm(conf.grey_to_monochrome_threshold, -10, 'i')
         def fun_0(self): w_shm(conf.grey_to_monochrome_threshold, +10, 'i')
-        def fun_y(self):
-            w_shm(conf.invert, 2, 'a'); 
-            ctx.invert = 2
-            w_shm(conf.invert_threshold, -10, 'i'); 
-            print("Smart invert is on with threshold ", r_shm(conf.invert_threshold, 'i') )
-        def fun_u(self):  
-            w_shm(conf.invert, 2, 'a'); 
-            ctx.invert = 2
-            w_shm(conf.invert_threshold, +10, 'i');
-            print("Smart invert is on with threshold ", r_shm(conf.invert_threshold, 'i'))
+        # def fun_y(self):
+        #     w_shm(conf.invert, 2, 'a'); 
+        #     ctx.invert = 2
+        #     w_shm(conf.invert_threshold, -10, 'i'); 
+        #     print("Smart invert is on with threshold ", r_shm(conf.invert_threshold, 'i') )
+        # def fun_u(self):  
+        #     w_shm(conf.invert, 2, 'a'); 
+        #     ctx.invert = 2
+        #     w_shm(conf.invert_threshold, +10, 'i');
+        #     print("Smart invert is on with threshold ", r_shm(conf.invert_threshold, 'i'))
         def fun_b(self):
             if r_shm(conf.enhance_before_greyscale, 'i') == 1:
                 ctx.enhance_before_greyscale = 0
@@ -808,7 +725,7 @@ def check_key_presses(PID_list, conf):
 
 
         elif not ctx.a.nokeychecker:
-            ret0 = s.indirect(x) 
+            ret0 = s.indirect(x.lower()) 
 
         if not ctx.a.nokeychecker:
             try: 
@@ -822,26 +739,19 @@ def check_key_presses(PID_list, conf):
 
 
 def select_inv(image_file, chunk_w, chunk_h, thres_perc, b_thres, fill_thres):
-    #pole_mode = r_shm(ctx.offsets.pole_mode, 'i')
-    np_arr = np.asarray(image_file)
-    np_arr = np.ravel(np_arr)
-    # if pole_mode == 2 and selective_invert_on == 1:
-    #     dith.invert_task_(np_arr, chunk_w, chunk_h, thres_perc, b_thres, fill_thres, ctx.pole_factor, ctx.pole_pivot) #polarizes as well
-    # elif selective_invert_on == 1:  #does only selective invert
+    np_arr = np.ravel(image_file)
     dith.selective_invert_v2_(np_arr, chunk_w, chunk_h, thres_perc, b_thres, fill_thres)
-    image_file = Image.frombytes('L', image_file.size, np_arr)
     return image_file
 
 def smart_invert(image_file):
     inv_thres = r_shm(ctx.offsets.invert_threshold, 'i')
     selective_invert = r_shm(ctx.offsets.selective_invert,'i')
 
-    np_arr = np.asarray(image_file)
-    n = np.mean(np_arr)
+    n = np.mean(image_file)
     inv = 0; inv2 = 0
 
     if n < inv_thres:
-        image_file = ImageOps.invert(image_file)
+        image_file =  cv2.bitwise_not(image_file)# ImageOps.invert(image_file)
         inv = 1
 
     if selective_invert == 1:
@@ -854,7 +764,7 @@ def check_and_invert(image_file):
     invert =  r_shm(ctx.offsets.invert, 'i')
     if invert > 0:
         if invert == 1:
-            image_file = ImageOps.invert(image_file)
+            image_file = cv2.bitwise_not(image_file)#ImageOps.invert(image_file)
         else:
             image_file = smart_invert(image_file)
     return image_file
@@ -865,7 +775,6 @@ def float_to_bytearray(float):
 def bytearray_to_float(bytearr):
     return struct.unpack('f', bytearr)   
 
-
 class offset_object:
     def __init__(self, byte_position, value, type):
         self.pos = byte_position
@@ -873,6 +782,7 @@ class offset_object:
         self.type = type
     def round(self):
         self.value = round(self.value, 1)
+        
 class shared_var:
     def __init__(self):
         self.mode = offset_object(10, 0, 'a')
@@ -888,31 +798,43 @@ class shared_var:
         self.polarize_factor =   offset_object(50, 0,'f')
         self.pole_mode =   offset_object(54, 0,'i')
         self.settings_changed =   offset_object(58, 0,'i')
+        self.fill_blacks = offset_object(62, 0,'i')
+        self.polarize_text = offset_object(66, 0,'i')
 
 
-def apply_enhancements(image_file, conf, offsets):
+def apply_enhancements(opencv_image, conf):
     #t0 = time.time()
-    val0, val1, val2, val3 =  print_settings()
+    settings = [conf.color, conf.contrast, conf.brightness, conf.sharpness]
+    val0, val1, val2, val3 = [ val + settings[i] for i, val in enumerate(print_settings())]
+    if val0 != 0 or val1 != 0 or val2 != 0 or val3 != 0:
+        pil_image = Image.fromarray(opencv_image)
+        if val0 != 1.0:
+            enhancer = ImageEnhance.Color(pil_image)
+            pil_image = enhancer.enhance(val0)     
 
-    if conf.color + val0 != 1.0:
-        enhancer = ImageEnhance.Color(image_file)
-        image_file = enhancer.enhance(conf.color + val0)     
+        if  val1  != 1.0:
+            enhancer = ImageEnhance.Contrast(pil_image)
+            pil_image = enhancer.enhance( val1)
 
-    if conf.contrast + val1  != 1.0:
-        enhancer = ImageEnhance.Contrast(image_file)
-        image_file = enhancer.enhance(conf.contrast + val1)
+        if val2 != 1.0:
+            enhancer = ImageEnhance.Brightness(pil_image)
+            pil_image = enhancer.enhance(val2)
 
-    if conf.brightness + val2 != 1.0:
-        enhancer = ImageEnhance.Brightness(image_file)
-        image_file = enhancer.enhance(conf.brightness + val2)
+        if  val3 != 1.0:
+            enhancer = ImageEnhance.Sharpness(pil_image)
+            pil_image = enhancer.enhance( val3)
 
-    if conf.sharpness + val3 != 1.0:
-        enhancer = ImageEnhance.Sharpness(image_file)
-        image_file = enhancer.enhance(conf.sharpness + val3)
+        #print("enhance took", time.time() - t0 )
+        arr = np.array(pil_image)
+        if pil_image.mode == "L":
+            opencv_image = arr.reshape(opencv_image.shape)
+            pass
+            #opencv_image = cv2.cvtColor(arr, cv2.COLOR_RGBA2GRAY)
+        else:
+            opencv_image = cv2.cvtColor(arr, cv2.COLOR_RGB2BGRA)
 
-    #print("enhance took", time.time() - t0 )
 
-    return image_file
+    return opencv_image
 
 def print_settings(check_only=None):
     ctx.settings_changed = r_shm(ctx.offsets.settings_changed, 'i')
@@ -928,40 +850,173 @@ def print_settings(check_only=None):
 
     return val0, val1, val2, val3
 
-def convert_to_greyscale_and_enhance(image_file, conf):
+def find_contours(bgra_image): #for testing
+    gray = cv2.cvtColor(bgra_image, cv2.COLOR_BGRA2GRAY)
+    ret, thresh_gray = cv2.threshold(gray, 200, 255, cv2.THRESH_BINARY)
+    contours, hier = cv2.findContours(thresh_gray, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
 
-    enhance_before_greyscale = r_shm(ctx.offsets.enhance_before_greyscale, 'i')
-    val = r_shm(ctx.offsets.mode, 'i')
-    pole_mode = r_shm(ctx.offsets.pole_mode, 'i')
+    # Erase small contours, and contours which small aspect ratio (close to a square)
+    for c in contours:
+        area = cv2.contourArea(c)
 
-    if enhance_before_greyscale or  val > 0 and val < 9:
-        image_file = apply_enhancements(image_file, conf, ctx.offsets)
+        # Fill very small contours with zero (erase small contours).
+        if area < 10:
+            cv2.fillPoly(thresh_gray, pts=[c], color=0)
+            continue
 
-    if (pole_mode == 1):
-        ctx.np_arr = np.asarray(image_file)
-        ctx.np_arr = np.ravel(ctx.np_arr)
-        dith.polarize_(ctx.np_arr, ctx.pole_factor, ctx.pole_pivot, ctx.tot_nb_pixels*3)
-        if val >= 9 or val == 0:
-            image_file = Image.frombytes('RGB', (ctx.width, ctx.height), ctx.np_arr)
+        # https://stackoverflow.com/questions/52247821/find-width-and-height-of-rotatedrect
+        rect = cv2.minAreaRect(c)
+        (x, y), (w, h), angle = rect
+        aspect_ratio = max(w, h) / min(w, h)
 
-    elif val > 0 and val < 9:
-        ctx.np_arr = np.asarray(image_file)
-        ctx.np_arr = np.ravel(ctx.np_arr)
+        # Assume zebra line must be long and narrow (long part must be at lease 1.5 times the narrow part).
+        if (aspect_ratio < 1.5):
+            cv2.fillPoly(thresh_gray, pts=[c], color=0)
+            continue
 
-    if val >= 9 or val == 0:
-        image_file = image_file.convert('L')
+    # Use "close" morphological operation to close the gaps between contours
+    # https://stackoverflow.com/questions/18339988/implementing-imcloseim-se-in-opencv
+    thresh_gray = cv2.morphologyEx(thresh_gray, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (51,51)));
 
-        if pole_mode == 2:
-            np_arr = np.asarray(image_file)
-            np_arr = np.ravel(np_arr)
-            dith.polarize_(np_arr, ctx.pole_factor,ctx.pole_pivot, ctx.tot_nb_pixels)
-            image_file = Image.frombytes('L', (ctx.width, ctx.height), np_arr)
+    # Find contours in thresh_gray after closing the gaps
+    contours, hier = cv2.findContours(thresh_gray, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
 
-        image_file = check_and_invert(image_file)
+    for c in contours:
+        area = cv2.contourArea(c)
 
-    if enhance_before_greyscale  == 0 and val >= 9 or val == 0:
-        image_file = apply_enhancements(image_file, conf, ctx.offsets)
-    return image_file
+        # Small contours are ignored.
+        if area < 500:
+            cv2.fillPoly(thresh_gray, pts=[c], color=0)
+            #continue
+
+        rect = cv2.minAreaRect(c)
+        box = cv2.boxPoints(rect)
+        # convert all coordinates floating point values to int
+        box = np.int0(box)
+        cv2.drawContours(bgra_image, [box], 0, (0, 255, 0),1)
+
+    cv2.imshow('paper', bgra_image)
+    #cv2.imwrite('paper.jpg', paper)
+    cv2.waitKey(1)
+
+def polarize_text(grayscale_image, final_kernel_size, apply_to=np.array([[0]])):
+    #find_contours(grayscale_image)
+    opencv_image_ori = grayscale_image#cv2.cvtColor(np.array(sct_img), cv2.COLOR_BGRA2GRAY)
+
+    inv_thres = r_shm(ctx.offsets.invert_threshold, 'i')
+
+    n = np.mean(opencv_image_ori)
+
+    opencv_image = None
+    if n <  inv_thres and 0:   
+        opencv_image = 255-opencv_image_ori.copy()
+    else: opencv_image = opencv_image_ori.copy()
+    
+    if r_shm(ctx.offsets.selective_invert,'i'):
+        np_arr = np.ravel(opencv_image)
+        dith.selective_invert_v2_(np_arr, 5, 5, 50, 60, 5)
+        opencv_image = np_arr.reshape(opencv_image.shape)
+
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+    grad = cv2.morphologyEx(opencv_image, cv2.MORPH_GRADIENT, kernel)
+
+    _, bw = cv2.threshold(grad, 0.0, 255.0, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
+
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, final_kernel_size) #9,1
+    connected = cv2.morphologyEx(bw, cv2.MORPH_CLOSE, kernel)
+    
+    # kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (30,1 ))
+    # connected2 = cv2.morphologyEx(bw, cv2.MORPH_CLOSE, kernel)
+    # merge = cv2.bitwise_or(connected, connected2)
+
+    #cv2.imshow("connected", connected)
+    #cv2.imshow("connected2", connected2)
+    #cv2.imshow("merge", merge)
+    contours, hierarchy = cv2.findContours(connected.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+
+    perform_on = apply_to if apply_to.shape != (1, 1) else opencv_image
+
+    thres = 100
+    thres_max = 10000
+    mult = 1.0
+    for contour in contours:
+        x, y, w, h = cv2.boundingRect(contour)
+        # cv2.rectangle(perform_on, (x, y), (x + w, y + h), (0, 255, 0), 2)
+        # continue
+        centerx = x+w//2; centery =  y+h//2
+        w= int(w*mult)
+        h= int(h*mult)
+        a = w*h
+        #if a < thres or a > thres_max:continue
+        xx = centerx - w//2
+        yy = centery - h//2
+        enhanced_roi = perform_on[yy:yy+h, xx:xx+w]
+        #alpha = 3# Contrast control (1.0-3.0)
+        #beta = 1    # Brightness control (0-100)
+        #enhanced_roi = cv2.convertScaleAbs(enhanced_roi, alpha=alpha, beta=beta)
+        #enhanced_roi = cv2.equalizeHist(enhanced_roi)
+        #if n >  inv_thres:   
+        mean = np.mean(enhanced_roi)
+        if mean < 120:
+            enhanced_roi = 255-enhanced_roi
+        enhanced_roi = (enhanced_roi[:,:]>=np.mean(enhanced_roi,axis=(0,1)))*255
+        # min_val = np.min(roi)
+        # max_val = np.max(roi)
+        # enhanced_roi = cv2.convertScaleAbs(roi, alpha=255.0/(max_val-min_val), beta=-min_val*(255.0/(max_val-min_val)))
+        perform_on[yy:yy+h, xx:xx+w] = enhanced_roi                    
+
+    #print("--->", time.time() -t)
+
+    # cv2.imshow('perform_on', perform_on)
+    # cv2.moveWindow('perform_on', 1200, 0)
+
+    # cv2.imshow(f"opencv_image_ori", opencv_image_ori)
+    # cv2.moveWindow('opencv_image_ori', 0, 825)
+    return perform_on
+    
+def fill_blacks(opencv_image):
+    
+    #im_floodfill_inv = cv2.bitwise_not(im_floodfill)            
+    th = ctx.grey_monochrome_threshold+r_shm(ctx.offsets.grey_to_monochrome_threshold, 'i')
+
+    _, im_in = cv2.threshold(opencv_image, th, 255, cv2.THRESH_BINARY)
+    
+    im_floodfill = im_in.copy()
+    h, w = im_floodfill.shape[:2]
+    mask = np.zeros((h+2, w+2), np.uint8)#+ 0
+    cv2.floodFill(im_floodfill, mask, (0,0), 255)
+
+    #thresh, im_in = cv2.threshold(opencv_image, 128, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
+
+    #im_in = 255 - im_in
+    im_out = im_in.copy()
+
+    #im_out = cv2.cvtColor(np.array(sct_img), cv2.COLOR_BGRA2GRAY)
+                
+    kernel = np.ones((3,3), np.uint8)
+    inverted_image = cv2.bitwise_not(im_in)
+    eroded_image = cv2.erode(inverted_image, kernel, iterations=2)
+    result_image = cv2.bitwise_not(eroded_image)
+
+    mask = eroded_image != 0
+    im_out[mask] = eroded_image[mask]
+    
+    # cv2.imshow('im_in', im_in)
+    # cv2.moveWindow('im_in', 0, 0)
+
+    # cv2.imshow('im_out', im_out)
+    # cv2.moveWindow('im_out', 1200, 1000)
+
+    # cv2.imshow('array_thresholded', result_image)
+    # cv2.moveWindow('array_thresholded', 1200, 1000)
+
+    # cv2.waitKey(1)
+    return im_out
+    
+def check_if_before_apply_enhancements(opencv_image, ctx):
+    if r_shm(ctx.offsets.enhance_before_greyscale, 'i'):
+        return apply_enhancements(opencv_image, ctx)
+    return opencv_image
 
 args = args_eval() 
 nb_displays = eval_args(args)

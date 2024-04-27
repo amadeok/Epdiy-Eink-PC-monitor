@@ -69,19 +69,19 @@ void generate_eink_framebuffer_v2(char *source_8bpp_current, char *source_8bpp_p
                     {
                     case 0:
                         break;
-                    case 1:
+                    case 255:
                         temp_masks[1] |= 1 << y * 2; // make pixel blacker
                         break;
                     }
                     break;
 
-                case 1: //cur
+                case 255: //cur
                     switch (prev)
                     {
                     case 0:
                         temp_masks[0] |= 2 << y * 2; // make pixel whiter
                         break;
-                    case 1:
+                    case 255:
                         break;
                     }
                     break;

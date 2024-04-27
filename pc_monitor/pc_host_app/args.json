@@ -1,5 +1,5 @@
 {
-    "esp32_ip_address": "192.168.1.29",
+    "esp32_ip_address": "192.168.1.27",
     "id": 1,
     "width_resolution": 1200,
     "height_resolution": 825,
@@ -9,26 +9,22 @@
             {
                 "type": "black_and_white",
                 "rmt_high_times": [
-                    50,
-                    125,
-                    200,
-                    275,
-                    350
+                    120
                 ]
             }
         ]
     },
-    "enable_skipping": 1,
+    "enable_skipping": 0,
     "epd_skip_threshold": 100,
     "esp32_multithread": 0,
     "mode": 0,
-    "selective_compression": 0,
-    "nb_chunks": 1,
+    "selective_compression": 1,
     "nb_draws": 1,
     "with_cv2": 0,
     "do_full_refresh": 0,
     "disable_logging": 0,
     "wifi_on": 1,
-    "refresh_on_startup": 2,
-    "pipe_bit_depth": 8
+    "refresh_on_startup": 0,
+    "pipe_bit_depth": 8,
+    "draw_black_on_startup": 0
 }

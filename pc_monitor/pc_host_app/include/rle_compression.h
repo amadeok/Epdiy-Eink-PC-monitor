@@ -3,7 +3,7 @@
 int rle_compress(char *array_to_compress, char *compression_temporary_array, int nb_chunks, char *compressed_eink_framebuffer, const int total_nb_pixels, const int chunk_size);
 
 // Replaces unnecessary bytes with 0s to improve rle compression, not needed if using generate_eink_framebuffer_v2()
-void optimize_rle(char *eink_framebuffer);
+void optimize_rle(char *eink_framebuffer, const int eink_framebuffer_size);
 
 // Simpler extraction for debugging
 void rle_extract2(int compressed_size, unsigned char *decompressed_p, unsigned char *compressed, int k);

@@ -30,7 +30,7 @@ static const std::map<std::string, drawTypeEnum> draw_type_map = {
 };
 
 struct draw_conf {
-    char* type;
+    const char* type;
     uint8_t typeID;
     int16_t  rmt_high_times[100];
     int16_t rmt_high_times_n;
@@ -60,8 +60,16 @@ void swap_bytes(char *eink_framebuffer, char *eink_framebuffer_swapped, int eink
 void improve_dither_compression(unsigned char *eink_framebuffer, int eink_framebuffer_size, unsigned char *line_changed, int width, int height);
 
 //Compare a framebuffer received from the board to the one sent (for debugging)
-int extract_and_compare(unsigned char *eink_framebuffer_swapped, int g);
+int extract_and_compare(unsigned char *eink_framebuffer_swapped, int g, int eink_framebuffer_size);
 
 DWORD pipe_read(HANDLE handle, void *buffer, DWORD nNumberOfBytesToRead, DWORD lpNumberOfBytesRead);
 DWORD pipe_write(HANDLE handle, void *buffer, DWORD nNumberOfBytesToWrite, DWORD lpNumberOfBytesWritten);
 
+
+const char *getStringValueFromObject(cJSON *object, const char *key);
+
+int getIntValueFromObject(cJSON *object, const char *key);
+
+cJSON * checkGetJsonOject(cJSON *object, const char *key);
+
+int getIntArrayItemFromObject(cJSON *object, int index);

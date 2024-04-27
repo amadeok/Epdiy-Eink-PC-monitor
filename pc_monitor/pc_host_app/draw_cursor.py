@@ -1,3 +1,5 @@
+import cv2
+import numpy
 import pyautogui, time, io, platform
 from PIL import Image
 
@@ -329,7 +331,24 @@ def paste_cursor(ctx, image_file):
         curr_coor.x = pos[0]; curr_coor.y = pos[1]
     
     if curr_coor.x >= ctx.x_offset and curr_coor.x <= ctx.width_res2 and curr_coor.y >= ctx.y_offset and curr_coor.y <= ctx.height_res2-22:
-        image_file.paste(ctx.cursor,box=(curr_coor.x-ctx.x_offset,curr_coor.y-ctx.y_offset),mask=ctx.cursor)
+        y = curr_coor.y-ctx.y_offset
+        x = curr_coor.x-ctx.x_offset
+        #bgr_image = cv2.cvtColor(image_file, cv2.COLOR_RGBA2BGR)
+        #print(x, y)
+        y1, y2 = y, y + ctx.cursor.shape[0]
+        x1, x2 = x, x + ctx.cursor.shape[1]
+
+        alpha_s = ctx.cursor[:, :, 3] / 255.0
+        alpha_l = 1.0 - alpha_s
+        try:
+            for c in range(0, 3):
+                image_file[y1:y2, x1:x2, c] = (alpha_s * ctx.cursor[:, :, c] +
+                                        alpha_l * image_file[y1:y2, x1:x2, c])
+        except:
+            pass
+
+        #image_file.paste(ctx.cursor,box=(curr_coor.x-ctx.x_offset,curr_coor.y-ctx.y_offset),mask=ctx.cursor)
+        
         if prev_coor.x == curr_coor.x and prev_coor.y == curr_coor.y:
             #print(f" not moved px {prev_coor.x}, cx {curr_coor.x}, py {prev_coor.y}, cy {curr_coor.y}")
             return 0

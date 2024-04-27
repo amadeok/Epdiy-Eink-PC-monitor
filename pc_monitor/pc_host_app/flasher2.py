@@ -10,7 +10,8 @@ import time
 exiting = False
 def flash_program(serial_port, chip_type, binary_file, baud_rate):
     flash_command = [
-        r"C:\Users\amade\AppData\Local\Programs\Python\Python310\Scripts\esptool.py.exe",
+        "py", "-m", "esptool",
+        #r"C:\Users\amade\AppData\Local\Programs\Python\Python310\Scripts\esptool.py.exe",
         "--chip",
         chip_type,
         "--port",

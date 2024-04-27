@@ -17,7 +17,6 @@ extern unsigned char *compressed_eink_framebuffer_ptrs[8];
 extern unsigned char *decompressed_received;
 
 extern int compressed_chunk_lengths[8];
-extern int chunk_size;
 
 //struct timeb start, end;
 
@@ -99,19 +98,20 @@ void improve_dither_compression(unsigned char *eink_framebuffer, int eink_frameb
     }
 }
 
-int extract_and_compare(unsigned char *eink_framebuffer_swapped, int g)
+int extract_and_compare(unsigned char *eink_framebuffer_swapped, int g, int eink_framebuffer_size)
 {
     rle_extract2(compressed_chunk_lengths[g], decompressed_received, compressed_eink_framebuffer_ptrs[g], g);
 
-    for (int h = 0; h < chunk_size - 2; h++)
+    for (int h = 0; h < eink_framebuffer_size - 2; h++)
     {
-        if (decompressed_received[h] != eink_framebuffer_swapped[(g * chunk_size) + h])
+        if (decompressed_received[h] != eink_framebuffer_swapped[(g * eink_framebuffer_size) + h])
         {
-            printf("arrays are different %d %d \n", decompressed_received[h], eink_framebuffer_swapped[(g * chunk_size) + h]);
+            printf("arrays are different %d %d \n", decompressed_received[h], eink_framebuffer_swapped[(g * eink_framebuffer_size) + h]);
             sleep(10);
             return h;
         }
     }
+    return -1;
 }
 
 DWORD pipe_read(HANDLE handle, void *buffer, DWORD nNumberOfBytesToRead, DWORD lpNumberOfBytesRead)
@@ -134,4 +134,61 @@ DWORD pipe_write(HANDLE handle, void *buffer, DWORD nNumberOfBytesToWrite, DWORD
     WriteFile(handle, buffer, nNumberOfBytesToWrite, &lpNumberOfBytesWritten, NULL);
 #endif
     return lpNumberOfBytesWritten;
+}
+
+cJSON * checkGetJsonOject(cJSON *object, const char *key){
+
+    if (object == nullptr)
+    {
+        printf("cJSON Error: JSON object is null.\n");
+        return nullptr;
+    }
+
+    cJSON *item = cJSON_GetObjectItem(object, key);
+    if (item == nullptr)
+    {
+        printf("cJSON Error: Item %s not found. \n", key);
+        return nullptr;
+    }
+    return item;
+}
+
+const char *getStringValueFromObject(cJSON *object, const char *key)
+{
+    cJSON * item = checkGetJsonOject(object, key);
+    if (item == nullptr) return "";
+
+    if (cJSON_IsString(item))
+        return item->valuestring;
+    else
+    {
+        printf("cJSON Error: Item %s is not of the expected type. \n", key);
+        return "";
+    }
+    return "";
+}
+
+int getIntValueFromObject(cJSON *object, const char *key)
+{
+    cJSON *item = checkGetJsonOject(object, key);
+    if (item == nullptr) return -1;
+
+    if (cJSON_IsNumber(item))
+        return item->valueint;
+    else
+    {
+        printf("cJSON Error: Item %s is not of the expected type. \n", key);
+        return -1;
+    }
+    return -1;
+}
+
+int getIntArrayItemFromObject(cJSON *object, int index)
+{
+    cJSON *item = cJSON_GetArrayItem(object, index);
+    if (item != nullptr && cJSON_IsNumber(item))
+        return item->valueint;
+    else 
+        printf("cJSON error: failed to get item index %d \n", index);
+    return -1;
 }

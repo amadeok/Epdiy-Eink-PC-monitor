@@ -35,8 +35,8 @@
                 "common",
                 //"dw",
                 //  "dp",
-           //     "--labels",
-          //      "top_left",
+             //   "--labels",
+             //   "top_right",
                 //python starter.py --labels top_left bottom_left top_right bottom_right  --added_args common
             ],
             "cwd": "${workspaceFolder}/pc_monitor/pc_host_app/"
@@ -50,8 +50,9 @@
             "args": [
                 "display0.conf",
                 // "display1.conf",
-             //     "dw", 
-                //    "dp",
+                  //"dw", 
+            //        "dp",
+              // ""
                 // "override_ip:192.168.1.28"
             ],
             "cwd": "${workspaceFolder}/pc_monitor/pc_host_app/"

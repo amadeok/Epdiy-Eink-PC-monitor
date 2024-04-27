@@ -7,7 +7,7 @@
 extern char *compressed_eink_framebuffer_ptrs[8];
 extern unsigned char *array_with_zeros, *draw_white_bytes, *draw_black_bytes;
 extern int compressed_chunk_lengths[8];
-extern int eink_framebuffer_size, chunk_size;
+// extern int eink_framebuffer_size;
 extern char working_dir[256];
 
 void rle_extract1(char *decompressed, int nb_chunks, char *eink_framebuffer_swapped, const int eink_framebuffer_size, int compressed_size)
@@ -83,16 +83,16 @@ void rle_extract1(char *decompressed, int nb_chunks, char *eink_framebuffer_swap
         //     }
         // }
         //   array_to_file(decompressed, counter2, working_dir, "decompressed", 0);
-        for (int h = 0; h < chunk_size; h++) // for debugging
+        for (int h = 0; h < eink_framebuffer_size; h++) // for debugging 
         {
-            if (decompressed[h] != eink_framebuffer_swapped[k * chunk_size + h])
+            if (decompressed[h] != eink_framebuffer_swapped[k * eink_framebuffer_size + h]) //deprecated
                 printf(" d ");
         }
     }
     //printf("10, 30, 50, 70, 90,  is %d, %d, %d, %d, %d, minus: %d \n", plus10, plus30, plus50, plus70, plus90, minus);
 }
 
-int rle_compress(char *array_to_compress, char *tmp_array, int nb_chunks, char *compressed_eink_framebuffer, const int total_nb_pixels, int chunk_size)
+int rle_compress(char *array_to_compress, char *tmp_array, int nb_chunks, char *compressed_eink_framebuffer, const int total_nb_pixels, int eink_framebuffer_size)
 {
 
     uint8_t t[256];
@@ -105,20 +105,20 @@ int rle_compress(char *array_to_compress, char *tmp_array, int nb_chunks, char *
     int k;
     for (k = 0; k < nb_chunks; k++)
     {
-        memcpy(tmp_array, array_to_compress + (k * chunk_size), chunk_size);
-        // array_to_file(source, chunk_size, working_dir, "source", k);
-       // array_to_file(array_to_compress + (k * chunk_size), chunk_size, working_dir, "atc", k);
+        memcpy(tmp_array, array_to_compress + (k * eink_framebuffer_size), eink_framebuffer_size);
+        // array_to_file(source, eink_framebuffer_size, working_dir, "source", k);
+       // array_to_file(array_to_compress + (k * eink_framebuffer_size), eink_framebuffer_size, working_dir, "atc", k);
         end_of_file = 0;
         counter = 0, counter2 = 0;
         if (nb_chunks == 2)
         {
             if (k == 0)
-                chunk_size = 123600;
+                eink_framebuffer_size = 123600;
             else
-                chunk_size = 123900;
+                eink_framebuffer_size = 123900;
         }
         t[0] = tmp_array[counter++];
-        while (counter < chunk_size)
+        while (counter < eink_framebuffer_size)
         {
             if (end_of_file == 1)
                 break;
@@ -126,16 +126,16 @@ int rle_compress(char *array_to_compress, char *tmp_array, int nb_chunks, char *
             if (t[0] != t[1]) // uncompressible sequence
             {
                 i = 1;
-                if (counter < chunk_size + 1)
+                if (counter < eink_framebuffer_size + 1)
                     do
                     {
                         t[++i] = tmp_array[counter++];
-                        if (counter >= chunk_size)
+                        if (counter >= eink_framebuffer_size)
                         {
                             end_of_file = 1;
                             break;
                         }
-                    } while (counter < chunk_size && i < 128 && t[i] != t[i - 1]);
+                    } while (counter < eink_framebuffer_size && i < 128 && t[i] != t[i - 1]);
                 if ((keep = t[i] == t[i - 1]))
                     --i;
 
@@ -152,7 +152,7 @@ int rle_compress(char *array_to_compress, char *tmp_array, int nb_chunks, char *
             do
             {
                 t[1] = tmp_array[counter++];
-                if (counter >= chunk_size)
+                if (counter >= eink_framebuffer_size)
                 {
                     end_of_file = 1;
                     break;
@@ -174,24 +174,24 @@ int rle_compress(char *array_to_compress, char *tmp_array, int nb_chunks, char *
     return counter2;
 }
 
-int rle_compress_v2(unsigned char *array_to_compress, unsigned char tmp_array[], int nb_chunks, uint16_t **added_compression_arr, const int chunk_size)
+int rle_compress_v2(unsigned char *array_to_compress, unsigned char tmp_array[], int nb_chunks, uint16_t **added_compression_arr, const int eink_framebuffer_size)
 {
 
     uint8_t t[256];
     int i = 0, keep, end_of_file = 0, counter = 0, counter2, counter3 = 0;
     long t1 = getTick();
-    array_to_file(array_to_compress, chunk_size / 100, working_dir, "array_to_compress", 0);
+    array_to_file(array_to_compress, eink_framebuffer_size / 100, working_dir, "array_to_compress", 0);
     //array_to_file(eink_framebuffer_swapped, total_nb_pixels / 2, working_dir, "eink_framebuffer_swapped", 0);
     int k;
     for (k = 0; k < nb_chunks; k++)
     {
-        memcpy(tmp_array, array_to_compress + (k * chunk_size), chunk_size);
-        // array_to_file(source, chunk_size, working_dir, "source", k);
+        memcpy(tmp_array, array_to_compress + (k * eink_framebuffer_size), eink_framebuffer_size);
+        // array_to_file(source, eink_framebuffer_size, working_dir, "source", k);
         end_of_file = 0;
         counter = 0, counter2 = 0;
 
         t[0] = tmp_array[counter++];
-        while (counter < chunk_size)
+        while (counter < eink_framebuffer_size)
         {
             if (end_of_file == 1)
                 break;
@@ -199,16 +199,16 @@ int rle_compress_v2(unsigned char *array_to_compress, unsigned char tmp_array[],
             if (t[0] != t[1]) // uncompressible sequence
             {
                 i = 1;
-                if (counter < chunk_size + 1)
+                if (counter < eink_framebuffer_size + 1)
                     do
                     {
                         t[++i] = tmp_array[counter++];
-                        if (counter >= chunk_size)
+                        if (counter >= eink_framebuffer_size)
                         {
                             end_of_file = 1;
                             break;
                         }
-                    } while (counter < chunk_size && i < 128 && t[i] != t[i - 1]);
+                    } while (counter < eink_framebuffer_size && i < 128 && t[i] != t[i - 1]);
 
                 if ((keep = t[i] == t[i - 1]))
                     --i;
@@ -236,7 +236,7 @@ int rle_compress_v2(unsigned char *array_to_compress, unsigned char tmp_array[],
             do
             {
                 t[1] = tmp_array[counter++];
-                if (counter >= chunk_size)
+                if (counter >= eink_framebuffer_size)
                 {
                     end_of_file = 1;
                     break;
@@ -260,7 +260,7 @@ int rle_compress_v2(unsigned char *array_to_compress, unsigned char tmp_array[],
     return counter2;
 }
 
-void optimize_rle(char *eink_framebuffer)
+void optimize_rle(char *eink_framebuffer, const int eink_framebuffer_size)
 {
     for (int y = 0; y < eink_framebuffer_size; y++)
     {
