@@ -37,15 +37,15 @@ def flash_program(serial_port, chip_type, binary_file, baud_rate):
 
     
 def main():
-    if len(sys.argv) != 3:
+    if len(sys.argv) != 5:
         print("Usage: python flash_program.py <serial_port> <binary_file>")
         sys.exit(1)
         
     serial_port = sys.argv[1]
     binary_file = sys.argv[2]
     
-    chip_type = "esp32"  # Adjust this according to your ESP chip
-    baud_rate = 691200# 460800  # Adjust this according to your preference
+    chip_type = sys.argv[3]  # Adjust this according to your ESP chip
+    baud_rate = sys.argv[4]#691200# 460800  # Adjust this according to your preference
 
     # escape_thread = threading.Thread(target=esc_listener)
     # escape_thread.start()

@@ -328,8 +328,8 @@ extern int width_resolution;
 int get_n_lines_changed_1bpp(char *eink_framebuffer, char* line_changed, int rotation)
 {
     int tot = 0;
-//    int padding = 100;
-        int padding = rotation == 180 ? 1 : 15;
+    int padding =25;
+        //int padding = rotation == 180 ? 1 : 15;
     for (int y = 0; y < height_resolution; y++)
     {
         line_changed[y] = 0;

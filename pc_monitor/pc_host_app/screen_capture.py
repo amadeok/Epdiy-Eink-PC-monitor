@@ -150,17 +150,16 @@ def main_task(ctx):
 
         screen_changed = capture_list[0] != capture_list[1]#check_for_difference_esp_fun(capture_list, True)
         
-        #print(f"s.. {screen_changed} {(time.time() - t0):4.3f} ")
         mouse_moved = did_mouse_move(ctx)
+        
+        if ctx.with_cv2 == withCv2Enum.PYTHON.value or  ctx.with_cv2 == withCv2Enum.BOTH.value:
+            cv2.waitKey(1)
 
-        if mouse_moved:
-            pass
-        elif screen_changed == 0:# and r_shm(ctx.offsets.settings_changed, 'i') == 0:
+        if screen_changed == 0 and not mouse_moved:# and r_shm(ctx.offsets.settings_changed, 'i') == 0:
             time.sleep(ctx.sleep_time/1000)
             check_and_exit(fd0,fd1)
-            #print_settings()
-            if ctx.with_cv2 == withCv2Enum.PYTHON.value or  ctx.with_cv2 == withCv2Enum.BOTH.value:
-                cv2.waitKey(1)
+            print_settings()
+
         
             if quit_all: break
             continue
@@ -169,11 +168,11 @@ def main_task(ctx):
         if pipe_output: #synchronization with board
             if linux: ready = os.read(fd1, 1)
             elif windows: ret2 = win32file.ReadFile(fd1, 1)
-        print("new")
+
         opencv_image =  np.array(sct_img)
         
-        if ctx.with_cv2 == withCv2Enum.PYTHON.value or  ctx.with_cv2 == withCv2Enum.BOTH.value:
-            cv2.waitKey(1)
+        cv2.waitKey(1)
+
         # time.sleep(0.1)
         if ctx.pipe_bit_depth == 8:
             ctx.mouse_moved = paste_cursor(ctx, opencv_image)
@@ -182,6 +181,7 @@ def main_task(ctx):
         ctx.mode_code = mode
         pole_mode = r_shm(ctx.offsets.pole_mode, 'i')
         ctx.polarize_text = r_shm(ctx.offsets.polarize_text, 'i')
+        ctx.fill_blacks = r_shm(ctx.offsets.fill_blacks, 'i')
 
         # if mode ==  10 or ctx.nb_draws > 1: ctx.pipe_bit_depth = 8 #to do support switching modes duing runtime
         # else: ctx.pipe_bit_depth = 1
@@ -195,12 +195,12 @@ def main_task(ctx):
         elif mode == 0: #Monochrome
 
                 
-            opencv_image = check_if_before_apply_enhancements(opencv_image, ctx) #apply color, brightness, contrast ect..
+            opencv_image = check_if_before_apply_enhancements(opencv_image, ctx, 0) #apply color, brightness, contrast ect..
 
             #  (deprecated) if (pole_mode == 1): #rgb pole mode   opencv_image = apply_pole_menthod_rgb(ctx, opencv_image) 
                 
             opencv_image =  cv2.cvtColor(opencv_image, cv2.COLOR_BGRA2GRAY) 
-
+            image = opencv_image.copy()
             # (deprecated)  if pole_mode == 2: #grayscale pole mode   opencv_image = apply_pole_method_grayscale(ctx, opencv_image)
                 
             opencv_image = check_and_invert(opencv_image)
@@ -209,12 +209,38 @@ def main_task(ctx):
                 opencv_image = polarize_text(opencv_image,  (20, 1))
             if ctx.fill_blacks:
                 opencv_image = fill_blacks(opencv_image)
+            if not ctx.polarize_text and not ctx.fill_blacks:
+                th = ctx.grey_monochrome_threshold+r_shm(ctx.offsets.grey_to_monochrome_threshold, 'i')
+                _, opencv_image = cv2.threshold(opencv_image, th, 255, cv2.THRESH_BINARY)
+                
+                # val = np.mean(opencv_image,axis=(0,1))
+                # enhanced_roi = (opencv_image[:,:]>=th)*255
+                
+                # enhanced_roi = np.uint8(enhanced_roi)
+
+                # cv2.imshow('Enhanced ROI', enhanced_roi)
+                            
+                # height, width = image.shape
+
+                # block_size = 10
+                # for y in range(0, height, block_size):
+                #     for x in range(0, width, block_size):                        
+                #         block = image[y:y+block_size, x:x+block_size]
+                #         mean_color = (np.mean(block)//10 )*10
+                #         block2 = (block[:,:]>=mean_color)*255
+                #         if mean_color < 120:
+                #             block2 = 255-block2
+                #         image[y:y+block_size, x:x+block_size] = block2# mean_color
+                # cv2.imshow('Mean Average Image', image)
+                #     # cv2.waitKey(1)
+                
+    
             
-            opencv_image = check_if_before_apply_enhancements(opencv_image, ctx)  #apply color, brightness, contrast ect..         
+            opencv_image = check_if_before_apply_enhancements(opencv_image, ctx, 1)  #apply color, brightness, contrast ect..         
 
         elif mode > 0 and mode < 9: #other dithering
 
-            opencv_image = check_if_before_apply_enhancements(opencv_image, ctx)           
+            opencv_image = check_if_before_apply_enhancements(opencv_image, ctx, 0)           
 
             if (pole_mode == 1): #rgb pole mode
                 opencv_image = cv2.cvtColor(opencv_image, cv2.COLOR_RGBA2BGR)
@@ -231,7 +257,7 @@ def main_task(ctx):
                 
             ctx.np_arr = np.ravel(opencv_image)
 
-            opencv_image = check_if_before_apply_enhancements(opencv_image, ctx)      
+            opencv_image = check_if_before_apply_enhancements(opencv_image, ctx, 1)      
                  
 
             mode = get_mode(modes, r_shm(ctx.offsets.mode, 'i'))
@@ -253,28 +279,22 @@ def main_task(ctx):
             print("error?")
         # if mode != 10 and not ctx.nb_draws > 1 and 0:
         #     image_file = image_file.transpose(Image.FLIP_TOP_BOTTOM) #flip the image so that the first bytes contain the pixel data of the first lines
-        if ctx.rotation != 0:
-            opencv_image  = cv2.rotate(opencv_image, cv2.ROTATE_180)#image_file.rotate(ctx.rotation,  expand=True)
-            
         if ctx.with_cv2 == withCv2Enum.BOTH.value or ctx.with_cv2 == withCv2Enum.PYTHON.value:
             cv2.imshow('output_image', opencv_image)
             
-        if enable_raw_output: 
-            ctx.byte_string_list[ctx.switcher] = opencv_image
-            #raw_data = get_raw_pixels( image_file, raw_output_file, save_raw_file, ctx.switcher) #remove bitmap pad bytes
-        if save_bmp:
-            save_bmp_fun(image_file, mode)
-
+        if ctx.rotation != 0:
+            opencv_image  = cv2.rotate(opencv_image, cv2.ROTATE_180)#image_file.rotate(ctx.rotation,  expand=True)
+            
         if pipe_output: # and dif_list_sum
             # if ctx.pipe_bit_depth == 1:
             #     pipe_output_f(raw_data, ctx.eight_bpp, ctx.mouse_moved, fd1, fd0)  # 1bpp->raw_data[0]
             if ctx.pipe_bit_depth == 8:
-                pipe_output_f(ctx.byte_string_list[ctx.switcher], None, ctx.mouse_moved, fd1, fd0) 
+                pipe_output_f(opencv_image, None, ctx.mouse_moved, fd1, fd0) 
                 
         if ctx.a.disable_logging == 0:
             took = int(((time.time() - t0)*1000))
 
-            print(f"Display ID: {ctx.id}, capture took {took}ms")
+            #print(f"Display ID: {ctx.id}, capture took {took}ms")
         
 
 main_task(ctx)

@@ -225,7 +225,8 @@ class display_settings(object):
         self.settings_dither = 0
         self.np_arr = None
 
-                
+        if not type(self.draws_conf) == dict:
+            raise Exception("draws_conf is not a valid json string")
         self.nb_draws = len(self.draws_conf["draw_list"])
         if 1: #self.mode == "4grayscale" or self.nb_draws > 1 or 1: # or draw_white_first
             self.pipe_bit_depth = 8
@@ -236,7 +237,7 @@ class display_settings(object):
             self.eight_bpp = None
 
         #self.cursor = Image.open('imgs\cursor.png')
-        self.cursor = cv2.imread('imgs\cursor2.png', cv2.IMREAD_UNCHANGED) 
+        self.cursor = cv2.imread('imgs\cursor_thick_alpha_big.png', cv2.IMREAD_UNCHANGED) 
         if self.cursor.shape[2] == 3:
             self.cursor = cv2.cvtColor(self.cursor, cv2.COLOR_BGR2RGBA)
 
@@ -967,11 +968,13 @@ def polarize_text(grayscale_image, final_kernel_size, apply_to=np.array([[0]])):
 
     #print("--->", time.time() -t)
 
-    # cv2.imshow('perform_on', perform_on)
-    # cv2.moveWindow('perform_on', 1200, 0)
+    cv2.imshow('perform_on', perform_on)
+    cv2.moveWindow('perform_on', 1200, 0)
 
-    # cv2.imshow(f"opencv_image_ori", opencv_image_ori)
-    # cv2.moveWindow('opencv_image_ori', 0, 825)
+    cv2.imshow(f"opencv_image_ori", opencv_image_ori)
+    cv2.moveWindow('opencv_image_ori', 0, 825)
+    
+
     return perform_on
     
 def fill_blacks(opencv_image):
@@ -995,7 +998,7 @@ def fill_blacks(opencv_image):
                 
     kernel = np.ones((3,3), np.uint8)
     inverted_image = cv2.bitwise_not(im_in)
-    eroded_image = cv2.erode(inverted_image, kernel, iterations=2)
+    eroded_image = cv2.erode(inverted_image, kernel, iterations=3)
     result_image = cv2.bitwise_not(eroded_image)
 
     mask = eroded_image != 0
@@ -1013,8 +1016,8 @@ def fill_blacks(opencv_image):
     # cv2.waitKey(1)
     return im_out
     
-def check_if_before_apply_enhancements(opencv_image, ctx):
-    if r_shm(ctx.offsets.enhance_before_greyscale, 'i'):
+def check_if_before_apply_enhancements(opencv_image, ctx, of):
+    if of - r_shm(ctx.offsets.enhance_before_greyscale, 'i'):
         return apply_enhancements(opencv_image, ctx)
     return opencv_image
 

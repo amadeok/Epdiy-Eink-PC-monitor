@@ -103,7 +103,7 @@ for ddata in displayDataArr:
     for key, data in board_data.items():
         if key == ddata.port:
             ddata.id_label = data["id_label"]
-            ddata.ip = data["ip_adress"]
+            ddata.ip = data["ip_address"]
 
 for i, ddata in enumerate(displayDataArr):
 #for  key, value in replacements.items():
