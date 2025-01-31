@@ -1,0 +1,3 @@
+C:\Users\%username%\usbmmidd_v2\deviceinstaller64.exe enableidd 1
+
+ C:\Users\%username%\x86_64-12.2.0-release-win32-seh-msvcrt-rt_v10-rev2\mingw64\bin\g++.exe -g main.cpp generate_eink_framebuffer.cpp rle_compression.cpp utils.cpp -static -o process_capture.exe -I include -lws2_32 -IC:\Users\%username%\cJSON-1.7.17 -LC:/Users/%username%/cJSON-1.7.17/build -lcjson 

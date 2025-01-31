@@ -51,7 +51,8 @@ def main():
     baud_rate = 115200#691200# 460800  # Adjust this according to your preference
 
     binary_file = r"C:\epdiy-latest\epdiy\examples\pc_monitor\build\firmware.bin"  
-    binary_file = r"C:\Users\amade\slime\firmware\firmware-part-0.bin"
+    import os
+    binary_file = os.path.expandvars( r"C:\Users\%username%\slime\firmware\firmware-part-0.bin")
 
     escape_thread = threading.Thread(target=esc_listener)
     escape_thread.start()

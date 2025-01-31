@@ -4,26 +4,34 @@
         {
             "label": "build with MinGW",
             "type": "shell",
-            "command": "g++",
+            // "command": "g++",
+            // "command": "C:\\Users\\amade\\x86_64-12.2.0-release-win32-seh-msvcrt-rt_v10-rev2\\mingw64\\bin\\g++.exe",
+             "command": "C:\\Users\\amade\\x86_64-12.2.0-release-win32-seh-msvcrt-rt_v10-rev2\\mingw64\\bin\\g++.exe",
+
             "args": [
                 "-g",
                 "main.cpp",
                 "generate_eink_framebuffer.cpp",
                 "rle_compression.cpp",
                 "utils.cpp",
-                // "-static",
+                 "-static",
                 "-o",
                 "process_capture.exe",
                 "-I",
                 "include",
                 "-lws2_32",
-                "-IE:\\Users\\amade\\OpenCV-MinGW-4.5.5\\include",
-                 "-LE:\\Users\\amade\\OpenCV-MinGW-4.5.5\\x64\\mingw\\bin",
-                "-llibopencv_core455",
-                "-llibopencv_imgproc455",
-                "-llibopencv_highgui455",
-                "-llibopencv_imgcodecs455",
-                "-DWITHOPENCV"
+                // "-IC:\\Users\\amade\\OpenCV-MinGW-4.5.5\\include",
+                //  "-LC:\\Users\\amade\\OpenCV-MinGW-4.5.5\\x64\\mingw\\bin",
+                //  "-LC:\\Users\\amade\\OpenCV-MinGW-4.5.5\\x64\\mingw\\bin",
+                 "-IC:\\Users\\amade\\cJSON-1.7.17",
+                 "-LC:/Users/amade/cJSON-1.7.17/build",
+                 "-lcjson",
+                //  "-llibcjson"
+                // "-llibopencv_core455",
+                // "-llibopencv_imgproc455",
+                // "-llibopencv_highgui455",
+                // "-llibopencv_imgcodecs455",
+                // "-DWITHOPENCV"
             ],
             "group": {
                 "kind": "build",

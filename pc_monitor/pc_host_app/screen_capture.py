@@ -91,8 +91,9 @@ if ctx.a.child_process == 0:
             time.sleep(0.5)
             
             temp_file_path = get_json_file(x)
-                
-            R = subprocess.Popen([f'{working_dir}/{binary}', temp_file_path],  creationflags=subprocess.CREATE_NEW_CONSOLE)
+            path_ = f'{working_dir}/{binary}'
+            assert(os.path.isfile(path_))
+            R = subprocess.Popen([path_, temp_file_path],  creationflags=subprocess.CREATE_NEW_CONSOLE)
             ctx.has_childs = 1
             print(f"---------proc cap id {id} {R.pid}")
             PID_list.append(R.pid)

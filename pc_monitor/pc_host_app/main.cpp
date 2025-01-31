@@ -14,29 +14,37 @@
 #include <errno.h>
 #include <vector>
 
-#ifdef __linux__
-#include <sys/socket.h>
-#include <arpa/inet.h> //inet_addr
-#include <netinet/tcp.h>
-#elif _WIN32
-#include <winsock2.h>
-#pragma comment(lib, "ws2_32.lib") //Winsock Library
-#endif
-
 #include <64bitLUTc.h>
 
 #include <utils.h>
 #include <rle_compression.h>
 #include <generate_eink_framebuffer.h>
- #include <cJSON.h>
+#include <cJSON.h>
+
+#ifdef __linux__
+#include <sys/socket.h>
+#include <arpa/inet.h> //inet_addr
+#include <netinet/tcp.h>
+#endif
+// #elif _WIN32
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#pragma comment(lib, "ws2_32.lib") // Winsock Library
+// #endif
 
 #define FT245MODE 0
 
 #ifdef WITHOPENCV
 #include <opencv2/opencv.hpp>
-cv::Mat* whiteImage = nullptr;
+cv::Mat *whiteImage = nullptr;
 #endif
-enum withCv2Enum {    NONE,    PYTHON,    CPP ,    BOTH};
+enum withCv2Enum
+{
+    NONE,
+    PYTHON,
+    CPP,
+    BOTH
+};
 
 int width_resolution, height_resolution;
 
@@ -45,7 +53,7 @@ char compressed_chunk_lengths_in_bytes[64];
 char working_dir[256];
 unsigned char *array_with_zeros, *draw_white_bytes, *draw_black_bytes;
 
-char *line_changed[16]; //array containing 1 or 0 depending on whether the corresponding line on the screen has changed
+char *line_changed[16]; // array containing 1 or 0 depending on whether the corresponding line on the screen has changed
 
 SOCKET socket_desc;
 #if defined(_WIN32)
@@ -56,10 +64,10 @@ SOCKET socket_desc;
 
 int compressed_chunk_lengths[16];
 
-const char* transfer_uuid1 = "8fPMGCramH2aqRY2v5CGqY";
-const char* transfer_uuid2 = "gizUD6hB2kxJEewtbB4MvU";
+const char *transfer_uuid1 = "8fPMGCramH2aqRY2v5CGqY";
+const char *transfer_uuid2 = "gizUD6hB2kxJEewtbB4MvU";
 #define UUID_SIZE 22
-#define TRANSFER_MESSAGE_SIZE (UUID_SIZE*2)+4
+#define TRANSFER_MESSAGE_SIZE (UUID_SIZE * 2) + 4
 
 char transfer_message[TRANSFER_MESSAGE_SIZE];
 
@@ -73,9 +81,9 @@ unsigned char *compressed_received;   // for testing or debugging
 unsigned char *received;              // for testing or debugging
 char *tmp_array;
 
-char *compressed_eink_framebuffer_ptrs[16]; //array of pointers pointing to chunks of framebuffer
+char *compressed_eink_framebuffer_ptrs[16]; // array of pointers pointing to chunks of framebuffer
 int id, refresh_every_x_frames = 0, refresh_every_x_frames_, selective_compression;
-int total_nb_pixels, eink_framebuffer_size,  nb_rmt_times;
+int total_nb_pixels, eink_framebuffer_size, nb_rmt_times;
 int source_image_bit_depth = 1, mode = -1, esp32_multithread;
 int with_cv2 = 0;
 bool disable_logging;
@@ -90,7 +98,6 @@ uint32_t loop_counter[1] = {0};
 char input_pipe[200];
 char output_pipe[200];
 
-
 #ifdef __linux__
 int fd0, fd1;
 #elif _WIN32
@@ -99,11 +106,9 @@ DWORD dwRead;
 DWORD dwBytesWritten;
 #endif
 
-
-
-void wifi_transfer(char *eink_framebuffer_swapped, char* line_changed, int eink_framebuffer_size, cJSON* per_frame_settings_json)
+void wifi_transfer(char *eink_framebuffer_swapped, char *line_changed, int eink_framebuffer_size, cJSON *per_frame_settings_json)
 {
-    //cJSON *frameJsonMetadata = cJSON_CreateObject();
+    // cJSON *frameJsonMetadata = cJSON_CreateObject();
 
     DWORD ret2;
     char *framebuffer_to_send[16];
@@ -111,24 +116,22 @@ void wifi_transfer(char *eink_framebuffer_swapped, char* line_changed, int eink_
 
     int ret = 0, buf_size = 4096, tot = 0, tot2 = 0, len = 0;
 
-  //  per_frame_wifi_settings[0] = mouse_moved == 1 ? 'm' : 0;
-  //  per_frame_wifi_settings[1] = mode;
+    //  per_frame_wifi_settings[0] = mouse_moved == 1 ? 'm' : 0;
+    //  per_frame_wifi_settings[1] = mode;
 
     if (refresh_every_x_frames_ && loop_counter[0] == refresh_every_x_frames_ && do_full_refresh != 0)
     {
         loop_counter[0] = 0;
         cJSON_ReplaceItemInObject(per_frame_settings_json, "do_full_refresh", cJSON_CreateNumber(do_full_refresh));
-        //per_frame_wifi_settings[2] = full_refresh_delay;
+        // per_frame_wifi_settings[2] = full_refresh_delay;
     }
     else
         cJSON_ReplaceItemInObject(per_frame_settings_json, "do_full_refresh", cJSON_CreateNumber(0));
-      //  per_frame_wifi_settings[2] = 0;
+    //  per_frame_wifi_settings[2] = 0;
 
-    if (refresh_every_x_frames_&& loop_counter[0] == refresh_every_x_frames_ + 1)
+    if (refresh_every_x_frames_ && loop_counter[0] == refresh_every_x_frames_ + 1)
         loop_counter[0] = 0;
 
-
-    
     if (compressed_chunk_lengths[0] > eink_framebuffer_size / 100 * selective_compression && selective_compression != 0)
     {
         framebuffer_to_send[0] = eink_framebuffer_swapped + (eink_framebuffer_size * 0); //*g
@@ -146,19 +149,19 @@ void wifi_transfer(char *eink_framebuffer_swapped, char* line_changed, int eink_
     char *json_serialized = cJSON_PrintUnformatted(per_frame_settings_json);
     int32_t per_frame_settings_size = snprintf(NULL, 0, "%s", json_serialized);
     int32_t framebuffer_data_pos = per_frame_settings_size;
-    int32_t line_changed_pos =  framebuffer_data_pos + framebuffer_to_send_size;
+    int32_t line_changed_pos = framebuffer_data_pos + framebuffer_to_send_size;
 
     int32_t wifi_transfer_size = per_frame_settings_size + framebuffer_to_send_size + height_resolution;
 
     // cJSON_ReplaceItemInObject(per_frame_settings_json, "framebuffer_data_pos", cJSON_CreateNumber(framebuffer_data_pos));
     // cJSON_ReplaceItemInObject(per_frame_settings_json, "line_changed_pos", cJSON_CreateNumber(line_changed_pos));
-    
-    memcpy(transfer_message+UUID_SIZE, &per_frame_settings_size, 4);
-    
-    ret2 = send(socket_desc, transfer_message, TRANSFER_MESSAGE_SIZE, 0);
-   // int ret0 = recv(socket_desc, ready2, per_frame_settings_size, 0);
 
-   //std::cout  << std::string(cJSON_Print(per_frame_settings_json)) << "\n";
+    memcpy(transfer_message + UUID_SIZE, &per_frame_settings_size, 4);
+
+    ret2 = send(socket_desc, transfer_message, TRANSFER_MESSAGE_SIZE, 0);
+    // int ret0 = recv(socket_desc, ready2, per_frame_settings_size, 0);
+
+    // std::cout  << std::string(cJSON_Print(per_frame_settings_json)) << "\n";
 
     ret2 = send(socket_desc, json_serialized, per_frame_settings_size, 0);
     ret2 = send(socket_desc, line_changed, (height_resolution) * sizeof(unsigned char), 0);
@@ -204,7 +207,7 @@ void wifi_transfer(char *eink_framebuffer_swapped, char* line_changed, int eink_
 
 void send_refresh_framebuffers(char *padded_2bpp_framebuffer_current, char *compressed_eink_framebuffer)
 {
-    assert(0); //TO DO
+    assert(0); // TO DO
     printf("send_refresh_framebuffers\n");
     memset(line_changed, 1, height_resolution);
 
@@ -217,14 +220,14 @@ void send_refresh_framebuffers(char *padded_2bpp_framebuffer_current, char *comp
     }
     if (wifi_on)
     {
-      //  wifi_transfer(compressed_eink_framebuffer, 0);
+        //  wifi_transfer(compressed_eink_framebuffer, 0);
         recv(socket_desc, ready0, 6, 0);
     }
     memset(padded_2bpp_framebuffer_current, 170, eink_framebuffer_size);
     rle_compress(padded_2bpp_framebuffer_current, tmp_array, 1, compressed_eink_framebuffer, eink_framebuffer_size, eink_framebuffer_size);
     if (wifi_on)
     {
-      //  wifi_transfer(compressed_eink_framebuffer, 0);
+        //  wifi_transfer(compressed_eink_framebuffer, 0);
         recv(socket_desc, ready0, 6, 0);
     }
 }
@@ -274,9 +277,9 @@ static int mirroring_task()
     int compressed_framebuffer_size = 0;
 
     char *source_8bpp_current;           // array containing the current monochrome 8bpp screen capture
-    char *source_8bpp_previous;          //array containing the previous monochrome 8bpp screen capture
-    char *source_8bpp_modified_current;  //same as 'source_8bpp_current' but has been modified
-    char *source_8bpp_modified_previous; //same as 'source_8bpp_previous' but has been modified
+    char *source_8bpp_previous;          // array containing the previous monochrome 8bpp screen capture
+    char *source_8bpp_modified_current;  // same as 'source_8bpp_current' but has been modified
+    char *source_8bpp_modified_previous; // same as 'source_8bpp_previous' but has been modified
 
     char *eink_framebuffer[16]; // the 2bpp array that will be fed directly to the display
 
@@ -287,21 +290,21 @@ static int mirroring_task()
 
     char *compressed_eink_framebuffer; // an 'eink_framebuffer' that has been compressed with RLE compression
 
-    char *padded_2bpp_framebuffer_current;  //array containing the current monochrome 2bpp screen capture
-    char *padded_2bpp_framebuffer_previous; //array containing the previous monochrome 2bpp screen capture
+    char *padded_2bpp_framebuffer_current;  // array containing the current monochrome 2bpp screen capture
+    char *padded_2bpp_framebuffer_previous; // array containing the previous monochrome 2bpp screen capture
 
-    unsigned char *source_1bpp; //array containing the current monochrome 1bpp screen capture
+    unsigned char *source_1bpp; // array containing the current monochrome 1bpp screen capture
     uint16_t *added_compression_arr[8];
-    //per_frame_wifi_settings = (char *)calloc(per_frame_wifi_settings_size, sizeof(char));
+    // per_frame_wifi_settings = (char *)calloc(per_frame_wifi_settings_size, sizeof(char));
 
-    //line_changed = (char *)calloc(height_resolution, sizeof(char));
+    // line_changed = (char *)calloc(height_resolution, sizeof(char));
     source_1bpp = (unsigned char *)calloc(total_nb_pixels, sizeof(unsigned char));
     tmp_array = (char *)calloc(eink_framebuffer_size + 50000, sizeof(unsigned char));
-   // wifi_transfer_buffer = (char *)calloc(eink_framebuffer_size *2, sizeof(unsigned char));
+    // wifi_transfer_buffer = (char *)calloc(eink_framebuffer_size *2, sizeof(unsigned char));
 
-    //ready2 = (char *)calloc(per_frame_wifi_settings_size, sizeof(char));
-    ack2 = (unsigned char *)calloc(256*256, sizeof(char));
-    //memset(ready2, 0, per_frame_wifi_settings_size);
+    // ready2 = (char *)calloc(per_frame_wifi_settings_size, sizeof(char));
+    ack2 = (unsigned char *)calloc(256 * 256, sizeof(char));
+    // memset(ready2, 0, per_frame_wifi_settings_size);
 
     padded_2bpp_framebuffer_current = (char *)calloc(eink_framebuffer_size, sizeof(unsigned char));
     padded_2bpp_framebuffer_previous = (char *)calloc(eink_framebuffer_size, sizeof(unsigned char));
@@ -317,7 +320,7 @@ static int mirroring_task()
     decompressed = (char *)calloc(eink_framebuffer_size + 50000, sizeof(char));
 
     compressed_eink_framebuffer_ptrs[0] = (char *)calloc(eink_framebuffer_size * 2, sizeof(char));
-    //added_compression_arr[h] = (uint16_t *)calloc(eink_framebuffer_size * 2, sizeof(char));
+    // added_compression_arr[h] = (uint16_t *)calloc(eink_framebuffer_size * 2, sizeof(char));
 
     const int preallocated_eink_framebuffer_n = 2;
     for (int h = 0; h < 16; h++)
@@ -330,50 +333,47 @@ static int mirroring_task()
         line_changed[h] = (char *)calloc(height_resolution, sizeof(char));
 
     if (source_image_bit_depth == 1)
-    { //assume the first screen capture to be completely white
+    { // assume the first screen capture to be completely white
         memset(padded_2bpp_framebuffer_previous, 85, eink_framebuffer_size * sizeof(unsigned char));
         memset(padded_2bpp_framebuffer_current, 85, eink_framebuffer_size * sizeof(unsigned char));
     }
     else if (source_image_bit_depth == 8)
-    { //assume the first screen capture to be completely white
-
-     }
+    { // assume the first screen capture to be completely white
+    }
     else
     {
         printf("unsupported bit depth\n");
         return -1;
     }
 
-     white_pixel =  255;// source_image_bit_depth == 8  && mode == FourShadesGrayscale ? 255 : 1; //start_nb_draws 
-    
+    white_pixel = 255; // source_image_bit_depth == 8  && mode == FourShadesGrayscale ? 255 : 1; //start_nb_draws
+
     memset(source_8bpp_current, white_pixel, total_nb_pixels * sizeof(unsigned char));
     memset(source_8bpp_modified_current, white_pixel, total_nb_pixels * sizeof(unsigned char));
     memset(source_8bpp_previous, white_pixel, total_nb_pixels * sizeof(unsigned char));
 
     int tot_lines_changed[] = {1}, repeat_counter = 0, next = 0;
-    
 
     printf("C++ ID %d mirroring started \n", id);
 
     while (1)
     {
-        ret2 = pipe_write(fd1, ack, 1, ret2); //before or after rect?
-
+        ret2 = pipe_write(fd1, ack, 1, ret2); // before or after rect?
 
         if (tot_lines_changed[0] != 0 && wifi_on == 1) // if screen didn't change don't wait for ack from board
             recv(socket_desc, ready0, 6, 0);
 
-
         int16_t r_size = 0;
         ret2 = pipe_read(fd0, &r_size, 2, ret2);
-       // int r_size = 3 + nb_rmt_times * sizeof(uint16_t); 
+        // int r_size = 3 + nb_rmt_times * sizeof(uint16_t);
         ret2 = pipe_read(fd0, ack2, r_size, ret2);
-        if (ret2 != r_size){
+        if (ret2 != r_size)
+        {
             printf("c++ id %d warning ret2 pipe_settings \n", id);
             return -1;
         }
 
-        cJSON *per_frame_settings_json_root = cJSON_Parse((const char*)ack2);
+        cJSON *per_frame_settings_json_root = cJSON_Parse((const char *)ack2);
 
         if (per_frame_settings_json_root == nullptr)
         {
@@ -395,7 +395,7 @@ static int mirroring_task()
 
         cJSON *draws_conf = checkGetJsonOject(root_, "draws_conf");
         cJSON *draw_list = checkGetJsonOject(draws_conf, "draw_list");
-        
+
         int nb_draws = cJSON_GetArraySize(draw_list);
         cJSON_AddNumberToObject(draws_conf, "nb_draws", nb_draws);
 
@@ -403,7 +403,7 @@ static int mirroring_task()
             for (int i = preallocated_eink_framebuffer_n; i < nb_draws; i++)
                 eink_framebuffer[i] = (char *)calloc(eink_framebuffer_size, sizeof(char));
 
-        std::vector< draw_conf>  draws_conf_array;
+        std::vector<draw_conf> draws_conf_array;
         for (int i = 0; i < nb_draws; i++)
         {
             draw_conf conf;
@@ -414,20 +414,20 @@ static int mirroring_task()
             conf.type = getStringValueFromObject(element, "type");
             cJSON *rmt_high_times = checkGetJsonOject(element, "rmt_high_times");
             conf.rmt_high_times_n = cJSON_GetArraySize(rmt_high_times);
-         //   printf("draw %d  | type %s | rmt_high_times_n %d || ", i, conf.type, conf.rmt_high_times_n);
+            //   printf("draw %d  | type %s | rmt_high_times_n %d || ", i, conf.type, conf.rmt_high_times_n);
             cJSON_AddNumberToObject(element, "rmt_high_times_n", conf.rmt_high_times_n);
             for (int i = 0; i < conf.rmt_high_times_n; i++)
             {
                 conf.rmt_high_times[i] = getIntArrayItemFromObject(rmt_high_times, i);
-            //    printf(" %d ", conf.rmt_high_times[i]);
+                //    printf(" %d ", conf.rmt_high_times[i]);
             }
-            conf.typeID =  draw_type_map.find(std::string(conf.type))->second;
-            
+            conf.typeID = draw_type_map.find(std::string(conf.type))->second;
+
             draws_conf_array.push_back(conf);
-          //  printf("\n");
+            //  printf("\n");
         }
 
-        if (signal == 101) //ack2[0]
+        if (signal == 101) // ack2[0]
         {
             printf("C++ app ID %d exiting \n", id);
             close(socket_desc);
@@ -435,23 +435,21 @@ static int mirroring_task()
         }
 
         char *eight_bpp_ptr = mode == FourShadesGrayscale ? source_8bpp_modified_current : source_8bpp_current;
-        
-        white_pixel = 255;//source_image_bit_depth == 8 && mode == FourShadesGrayscale ? 255 : 1;// draw_white_first && mode == FourShadesGrayscale ? 255 : 1;
 
-        if (mode == FourShadesGrayscale || source_image_bit_depth == 8 )  // || nb_draws > 1
+        white_pixel = 255; // source_image_bit_depth == 8 && mode == FourShadesGrayscale ? 255 : 1;// draw_white_first && mode == FourShadesGrayscale ? 255 : 1;
+
+        if (mode == FourShadesGrayscale || source_image_bit_depth == 8) // || nb_draws > 1
         {
-          //  source_image_bit_depth = 8;
+            //  source_image_bit_depth = 8;
             refresh_every_x_frames_ = refresh_every_x_frames * nb_draws;
         }
         else
         {
             refresh_every_x_frames_ = refresh_every_x_frames;
-         //   source_image_bit_depth = 1;
+            //   source_image_bit_depth = 1;
         }
 
-
         long t0 = getTick();
-
 
         if (source_image_bit_depth == 1)
         {
@@ -471,11 +469,12 @@ static int mirroring_task()
                 memset(padded_2bpp_framebuffer_previous, 85, eink_framebuffer_size * sizeof(unsigned char));
             else
                 memset(source_8bpp_previous, white_pixel, total_nb_pixels * sizeof(unsigned char));
-            #ifdef WITHOPENCV
-            if (with_cv2 == withCv2Enum::BOTH || with_cv2 == withCv2Enum::CPP){
-                 *whiteImage = cv::Mat(height_resolution,width_resolution, CV_8UC1, cv::Scalar(0));
+#ifdef WITHOPENCV
+            if (with_cv2 == withCv2Enum::BOTH || with_cv2 == withCv2Enum::CPP)
+            {
+                *whiteImage = cv::Mat(height_resolution, width_resolution, CV_8UC1, cv::Scalar(0));
             }
-            #endif
+#endif
         }
         else
         {
@@ -508,25 +507,24 @@ static int mirroring_task()
             generate_eink_framebuffer_v1(source_1bpp, padded_2bpp_framebuffer_current, padded_2bpp_framebuffer_previous, eink_framebuffer[0]);
 
             optimize_rle(eink_framebuffer[0], eink_framebuffer_size);
-
         }
         else if (source_image_bit_depth == 8)
         {
 
             switch (nb_draws)
             {
-            case 99: //to do
+            case 99: // to do
                 generate_eink_framebuffer_v2(source_8bpp_current, source_8bpp_previous, source_8bpp_modified_previous, eink_framebuffer, mode, draws_conf_array);
                 break;
             default:
                 //  int t0 = getTick();
                 if (mode == FourShadesGrayscale)
                     quantize(source_8bpp_current, source_8bpp_modified_current, total_nb_pixels);
-                //array_to_file(source_8bpp_previous, total_nb_pixels, working_dir, "source_8bpp_previous", 0);
-                // system("python3 /home/amadeok/epdiy-working/examples/pc_monitor/pc_host_app/img_test.py source_8bpp_previous0");
-                // array_to_file(eight_bpp_ptr, total_nb_pixels, working_dir, "eight_bpp_ptr", 0);
-                // system("python3 /home/amadeok/epdiy-working/examples/pc_monitor/pc_host_app/img_test.py eight_bpp_ptr0");
-                // printf("%d \n", getTick() - t0);
+                // array_to_file(source_8bpp_previous, total_nb_pixels, working_dir, "source_8bpp_previous", 0);
+                //  system("python3 /home/amadeok/epdiy-working/examples/pc_monitor/pc_host_app/img_test.py source_8bpp_previous0");
+                //  array_to_file(eight_bpp_ptr, total_nb_pixels, working_dir, "eight_bpp_ptr", 0);
+                //  system("python3 /home/amadeok/epdiy-working/examples/pc_monitor/pc_host_app/img_test.py eight_bpp_ptr0");
+                //  printf("%d \n", getTick() - t0);
                 generate_eink_framebuffer_v2(eight_bpp_ptr, source_8bpp_previous, source_8bpp_modified_previous, eink_framebuffer, mode, draws_conf_array);
                 break;
 
@@ -557,11 +555,10 @@ static int mirroring_task()
 
             // rle_compress_v2(eink_framebuffer_swapped, tmp_array, 1, added_compression_arr, eink_framebuffer_size);
 
-            
-                unsigned int number2 = htonl(compressed_chunk_lengths[0]);
-                memcpy(compressed_chunk_lengths_in_bytes, &compressed_chunk_lengths[0], 4);
-                // tot += foo;
-            
+            unsigned int number2 = htonl(compressed_chunk_lengths[0]);
+            memcpy(compressed_chunk_lengths_in_bytes, &compressed_chunk_lengths[0], 4);
+            // tot += foo;
+
             // rle_extract1(decompressed, 1, eink_framebuffer_swapped, eink_framebuffer_size, compressed_chunk_lengths[0]); //for testing
 
             if (refresh_every_x_frames_ && loop_counter[0] == refresh_every_x_frames_ || loop_counter[0] == refresh_every_x_frames_ + 1)
@@ -583,8 +580,7 @@ static int mirroring_task()
                     loop_counter[0]++;
             }
 
-
-#ifdef WITHOPENCV  //for debuggin only
+#ifdef WITHOPENCV // for debuggin only
             if (with_cv2 == withCv2Enum::BOTH || with_cv2 == withCv2Enum::CPP)
             {
                 unsigned char pixels[4];
@@ -599,10 +595,10 @@ static int mirroring_task()
                     {
                         if (pixels[i] == 2)
                         {
-                            int y = ((n*4)+i) / width_resolution;
-                            int x = ((n*4)+i) % width_resolution; 
+                            int y = ((n * 4) + i) / width_resolution;
+                            int x = ((n * 4) + i) % width_resolution;
                             uchar &pixelValue = whiteImage->at<uchar>(y, x);
-                             pixelValue = 0;
+                            pixelValue = 0;
                             // imageData[((n*4)+i)] = 0;
                             // imageData[((n*4*3)+i*3)] = 0;
                             // imageData[((n*4*3)+i*3)+1] = 0;
@@ -611,23 +607,22 @@ static int mirroring_task()
                         else if (pixels[i] == 1)
                         {
                             // imageData[(((n*4)) + i)] = 255;
-                            int y = ((n*4)+i) / width_resolution;
-                            int x = ((n*4)+i) % width_resolution; 
+                            int y = ((n * 4) + i) / width_resolution;
+                            int x = ((n * 4) + i) % width_resolution;
                             uchar &pixelValue = whiteImage->at<uchar>(y, x);
-                              pixelValue = 255;
+                            pixelValue = 255;
                             // imageData[((n*4*3)+i*3)] = 255;
                             // imageData[((n*4*3)+i*3)+1] = 255;
                             // imageData[((n*4*3)+i*3)+2] = 255;
                         }
                     }
-
                 }
-                    cv::Mat horizontal_flip;
-                    cv::flip(*whiteImage, horizontal_flip, 1);
-                    cv::Mat both_flips;
-                    cv::flip(horizontal_flip, both_flips, 0);
-                    cv::imshow("White Image with Changed Pixels", both_flips);
-                    cv::waitKey(1);
+                cv::Mat horizontal_flip;
+                cv::flip(*whiteImage, horizontal_flip, 1);
+                cv::Mat both_flips;
+                cv::flip(horizontal_flip, both_flips, 0);
+                cv::imshow("White Image with Changed Pixels", both_flips);
+                cv::waitKey(1);
             }
 #endif
         }
@@ -637,13 +632,10 @@ static int mirroring_task()
         if (with_cv2 == withCv2Enum::BOTH || with_cv2 == withCv2Enum::CPP)
             cv::waitKey(1);
 #endif
-    cJSON_Delete(per_frame_settings_json_root);
-
+        cJSON_Delete(per_frame_settings_json_root);
     }
     return 0;
 }
-
-
 
 int main(int argc, char *argv[])
 {
@@ -653,7 +645,6 @@ int main(int argc, char *argv[])
     int enable_skipping;
     int epd_skip_threshold;
     int esp32_multithread;
-
 
     std::string jsonStr;
     cJSON *root = NULL;
@@ -723,13 +714,12 @@ int main(int argc, char *argv[])
     printf("wifi_on: %d\n", wifi_on);
     printf("source_image_bit_depth: %d\n", source_image_bit_depth);
 
-
-#ifdef WITHOPENCV //for debugging only
-    if (with_cv2 == withCv2Enum::BOTH || with_cv2 == withCv2Enum::CPP){
-        whiteImage = new cv::Mat(height_resolution,width_resolution, CV_8UC1, cv::Scalar(0));
+#ifdef WITHOPENCV // for debugging only
+    if (with_cv2 == withCv2Enum::BOTH || with_cv2 == withCv2Enum::CPP)
+    {
+        whiteImage = new cv::Mat(height_resolution, width_resolution, CV_8UC1, cv::Scalar(0));
     }
 #endif
-
 
     if (disable_logging == 1)
         printf("logging disabled \n");
@@ -790,7 +780,7 @@ int main(int argc, char *argv[])
 
 #endif
 
-    //Create socket
+    // Create socket
     struct sockaddr_in server;
     socket_desc = socket(AF_INET, SOCK_STREAM, 0);
     if (socket_desc == -1)
@@ -817,16 +807,15 @@ int main(int argc, char *argv[])
     getcwd(working_dir, sizeof(working_dir));
     printf("current working directory is: %s\n", working_dir);
 
-
     // Set TCP_NODELAY option
     BOOL flag = TRUE;
-    if (setsockopt(socket_desc, IPPROTO_TCP, TCP_NODELAY, (char*)&flag, sizeof(BOOL)) == SOCKET_ERROR) {
+    if (setsockopt(socket_desc, IPPROTO_TCP, TCP_NODELAY, (char *)&flag, sizeof(BOOL)) == SOCKET_ERROR)
+    {
         std::cerr << "Error setting TCP_NODELAY: " << WSAGetLastError() << "\n";
         closesocket(socket_desc);
         WSACleanup();
         return 1;
     }
-
 
     server.sin_addr.s_addr = inet_addr(esp32_ip_address);
     server.sin_family = AF_INET;
@@ -835,12 +824,12 @@ int main(int argc, char *argv[])
 
     if (wifi_on == 1)
     {
-        const char* transfer_uuid1 = "8fPMGCramH2aqRY2v5CGqY";
-        const char* transfer_uuid2 = "gizUD6hB2kxJEewtbB4MvU";
-        //char transfer_message[48];
-        memset(transfer_message, 0, UUID_SIZE*2 );
+        const char *transfer_uuid1 = "8fPMGCramH2aqRY2v5CGqY";
+        const char *transfer_uuid2 = "gizUD6hB2kxJEewtbB4MvU";
+        // char transfer_message[48];
+        memset(transfer_message, 0, UUID_SIZE * 2);
         memcpy(transfer_message, transfer_uuid1, UUID_SIZE);
-        memcpy(transfer_message+UUID_SIZE+4, transfer_uuid2, UUID_SIZE);
+        memcpy(transfer_message + UUID_SIZE + 4, transfer_uuid2, UUID_SIZE);
 
         int timeout = 20000; // Timeout in milliseconds
         setsockopt(socket_desc, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout, sizeof(timeout));
@@ -857,7 +846,6 @@ int main(int argc, char *argv[])
         memcpy(esp32_settings_char, jsonStr.c_str(), settings_size[0]);
         send(socket_desc, esp32_settings_char, settings_size[0], 0);
     }
-
 
     array_with_zeros = (unsigned char *)calloc(129, sizeof(unsigned char));
     draw_black_bytes = (unsigned char *)calloc(129, sizeof(unsigned char));

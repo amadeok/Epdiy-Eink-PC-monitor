@@ -8,3 +8,6 @@ pc_monitor/pc_host_app/process_capture.exe
 pc_monitor/pc_host_app/process_capture.exe
 pc_monitor/pc_host_app/process_capture.exe
 pc_monitor/pc_host_app/process_capture.exe
+pc_monitor/pc_host_app/-libcjson.dll
+pc_monitor/libcjson.dll.a
+libcjson.dll.a

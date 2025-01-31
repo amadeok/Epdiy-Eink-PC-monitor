@@ -1,7 +1,6 @@
 #pragma once
 #include <stdlib.h>
 #include <inttypes.h>
-#include "cJSON.h"
 #include <map>
 #include <string>
 
@@ -20,6 +19,7 @@
 #define cwd _getcwd
 #define cd _chdir
 #endif
+ #include "cJSON.h"
 
 enum drawTypeEnum {black_and_white, black, white};
 

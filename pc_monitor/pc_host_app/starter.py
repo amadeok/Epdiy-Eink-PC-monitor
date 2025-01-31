@@ -90,7 +90,7 @@ class displayData():
 d_orders = ["top_left",  "top_right", "bottom_left", "bottom_right"]
 ports = []
 if not args.ports:
-    board_data =  get_board_ips.read_serial_ports(["COM16", "COM17", "COM18", "COM19"])
+    board_data =  get_board_ips.read_serial_ports(["COM12", "COM3", "COM7", "COM11"])
     for key, data in board_data.items():
         if  data['id_label'] in args.labels:
             ports.append(key)

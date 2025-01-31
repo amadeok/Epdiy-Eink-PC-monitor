@@ -28,7 +28,7 @@ exiting = False
 #os.system("esptool.py")
 def flash_program(serial_port, chip_type, binary_file, baud_rate):
     flash_command = [
-        r"C:\Users\amade\AppData\Local\Programs\Python\Python310\Scripts\esptool.py.exe",
+       os.path.expandvars(r"C:\Users\%username%\AppData\Local\Programs\Python\Python310\Scripts\esptool.py.exe"),
         "--chip",
         chip_type,
         "--port",
