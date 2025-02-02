@@ -23,12 +23,14 @@ parser = argparse.ArgumentParser(
 parser.add_argument('--ports', type=str,  nargs='*',  help='board ports')
 parser.add_argument('--labels', type=str,   nargs='*',  help='board  id_label')
 parser.add_argument('--added_args', type=str,   nargs='*',  help='added args')
+parser.add_argument('--upside_down', type=bool,   nargs='*',  help='added args', default=False)
 
 args = parser.parse_args()
 
-print(args.ports)
-print(args.labels)
-print(args.added_args)
+print("ports: ", args.ports)
+print("labels: ",args.labels)
+print("added_args: ", args.added_args)
+print("upside_down: " , args.upside_down)
 
 if args.ports and args.labels and len(args.ports) and len(args.labels):
     raise Exception("specify either ports OR labels, not both")
@@ -105,15 +107,19 @@ for ddata in displayDataArr:
             ddata.id_label = data["id_label"]
             ddata.ip = data["ip_address"]
 
+if args.upside_down:
+    d_orders.reverse()
+    
 for i, ddata in enumerate(displayDataArr):
 #for  key, value in replacements.items():
     n = d_orders.index(ddata.id_label)
+    
     ddata.replacements = {
-    'ip_address': ddata.ip, #data[next(iter(data))]["ip_adress"],
-    'x_offset': rect["left"]+ (n%2)*(rect["width"]//2),
-    'y_offset': rect["top"]+ (int(n/2))*(rect["height"]//2),
-    'id': n,
-    'rotation': 180 if  n <= 1 else 0
+        'ip_address': ddata.ip, #data[next(iter(data))]["ip_adress"],
+        'x_offset': rect["left"]+ (n%2)*(rect["width"]//2),
+        'y_offset': rect["top"]+ (int(n/2))*(rect["height"]//2),
+        'id': n,
+        'rotation': (180 if  n <= 1 else 0) if  args.upside_down else (180 if  n >= 1 else 0)
     }
     #n+=1
     ddata.temp_file = generate_temp_file(template_file, ddata.replacements)
