@@ -1,5 +1,5 @@
 import serial
-import json
+import json, time
 
 def read_serial_ports(ports):
     serial_connections = []
@@ -12,6 +12,7 @@ def read_serial_ports(ports):
             print(f"Opened serial port {port}")
         except serial.SerialException as e:
             print(f"Failed to open serial port {port}: {e}")
+        time.sleep(0.1)
 
     data_received = {key: None for key in ports}
 
