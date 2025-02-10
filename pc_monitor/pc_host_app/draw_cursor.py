@@ -190,6 +190,7 @@ def did_mouse_move(ctx):
             pos = win32gui.GetCursorPos()
         except Exception as e:
             print("Error ", e)
+            return 0
         curr_coor.x = pos[0]; curr_coor.y = pos[1]
 
     if curr_coor.x >= ctx.x_offset and curr_coor.x <= ctx.width_res2 and curr_coor.y >= ctx.y_offset and curr_coor.y <= ctx.height_res2-22:
