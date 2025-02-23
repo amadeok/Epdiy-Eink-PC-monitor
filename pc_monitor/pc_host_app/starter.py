@@ -23,7 +23,7 @@ parser = argparse.ArgumentParser(
 parser.add_argument('--ports', type=str,  nargs='*',  help='board ports')
 parser.add_argument('--labels', type=str,   nargs='*',  help='board  id_label')
 parser.add_argument('--added_args', type=str,   nargs='*',  help='added args')
-parser.add_argument('--upside_down', type=bool,   nargs='*',  help='added args', default=False)
+parser.add_argument('--upside_down', type=bool,     help='added args', default=False)
 
 args = parser.parse_args()
 
@@ -92,7 +92,8 @@ class displayData():
 d_orders = ["top_left",  "top_right", "bottom_left", "bottom_right"]
 ports = []
 if not args.ports:
-    board_data =  get_board_ips.read_serial_ports( ["COM13", "COM14", "COM15", "COM16"])
+    # board_data =  get_board_ips.read_serial_ports( ["COM13", "COM14", "COM15", "COM16"])
+    board_data =  get_board_ips.read_serial_ports( ["COM20", "COM19"])#, "COM18", "COM19", "COM20"])
     # board_data =  get_board_ips.read_serial_ports(["COM13"]) 
     for key, data in board_data.items():
         if  data['id_label'] in args.labels:
